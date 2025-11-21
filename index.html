@@ -588,13 +588,29 @@
 
   <!-- ======= Start Contact Section ======= -->
 
-  <section id="mcp" class="contact" style="background: #18181b; color: #e4e4e7; padding: 60px 0 0 0;">
-    <div class="container">
+  <section id="mcp" class="contact" style="background: #282f35; color: #e4e4e7; padding: 60px 0 0 0;">
+    <div class="container" style="max-width:900px; margin:0 auto; padding:0 24px;">
       <!-- MCP Server Section -->
       <div class="section-title" style="margin-bottom: 32px;">
-        <h2 style="font-size: 2.5rem; font-weight: 700; color: #fff; margin-bottom: 0;">Model Context Protocol (MCP)</h2>
-        <p style="font-size: 1.25rem; color: #a1a1aa; margin-bottom: 40px;">
-          Access my entire content ecosystem through AI. Connect your AI assistant to 21 tools across my YouTube videos, blog posts, speaking engagements, newsletters, and podcast episodes using the Model Context Protocol.
+        <h2 style="
+          font-size: 2.5rem;
+          font-weight: 800;
+          color: #fff;
+          margin-bottom: 24px;
+          letter-spacing: -1px;
+          line-height: 1.16;
+        ">
+          MCP
+        </h2>
+        <p style="
+          font-size: 1.2rem;
+          color: #bdbdbd;
+          font-weight: 400;
+          line-height: 1.7;
+          margin-bottom: 40px;
+          max-width: 720px;
+        ">
+          Access my content ecosystem through AI. Connect your AI assistant to tools across my YouTube videos and blog posts using the Model Context Protocol.
         </p>
         <div style="background: #27272a; border-radius: 12px; padding: 24px; margin-bottom: 32px;">
           <div style="font-size: 1rem; color: #d4d4d8; margin-bottom: 4px;">MCP Server URL</div>
@@ -602,19 +618,15 @@
             <a href="https://mcp.danielliu.dev/mcp" target="_blank" style="color: #60a5fa; font-size: 1.2rem; text-decoration: underline;">https://mcp.danielliu.dev/mcp</a>
           </div>
         </div>
-        <div style="display: flex; gap: 16px; flex-wrap: wrap;">
-          <a href="https://github.com/danielliu" target="_blank" style="background: #2563eb; color: #fff; padding: 12px 32px; border-radius: 8px; font-weight: 600; text-decoration: none; font-size: 1rem;">View on GitHub</a>
-          <a href="#how-to-use" style="background: #27272a; color: #fff; padding: 12px 32px; border-radius: 8px; font-weight: 600; text-decoration: none; font-size: 1rem;">Get Started</a>
-        </div>
       </div>
 
       <!-- How to Use MCP -->
       <div id="how-to-use" style="margin: 64px 0 32px 0;">
-        <h2 style="font-size: 2rem; font-weight: 700; color: #fff;">How to Use</h2>
-        <p style="font-size: 1.1rem; color: #a1a1aa;">
+        <h2 style="font-size: 2rem; font-weight: 700; color: #fff; margin-bottom:18px;">How to Use</h2>
+        <p style="font-size: 1.1rem; color: #a1a1aa; line-height:1.7; margin-bottom:24px;">
           Connect this MCP server to your favorite AI assistant in minutes. No API keys required — the server is publicly accessible.
         </p>
-        <h3 style="font-size: 1.1rem; color:#fff; font-weight: 600; margin-top: 24px;">Configuration</h3>
+        <h3 style="font-size: 1.1rem; color:#fff; font-weight: 600; margin-top: 24px; margin-bottom:12px;">Configuration</h3>
         <div style="background: #232329; border-radius: 10px; padding: 22px; margin-bottom: 24px; font-family: monospace; color: #fff;">
           <pre style="margin:0; color:#fff; font-size:1.1rem;">{
     "mcpServers": {
@@ -624,22 +636,22 @@
     }
   }</pre>
         </div>
-        <h3 style="font-size: 1.1rem; color:#fff; font-weight: 600;">Compatible AI Tools</h3>
-        <div style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom: 18px;">
-          <div style="background: #232329; padding:12px 30px; border-radius:8px; font-weight:600;">Claude Desktop</div>
-          <div style="background: #232329; padding:12px 30px; border-radius:8px; font-weight:600;">Cursor</div>
-          <div style="background: #232329; padding:12px 30px; border-radius:8px; font-weight:600;">VSCode</div>
-          <div style="background: #232329; padding:12px 30px; border-radius:8px; font-weight:600;">Goose</div>
+        <h3 style="font-size: 1.1rem; color:#fff; font-weight: 600; margin-bottom:16px;">Compatible AI Tools</h3>
+        <div style="display:flex; gap:24px; flex-wrap:wrap; margin-bottom: 28px;">
+          <div style="background: #232329; color: #fff; padding: 22px 48px; border-radius: 14px; font-size:1.25rem; font-weight:700; box-shadow:0 2px 8px #1a1a1a11; min-width:160px; text-align:center;">Claude Desktop</div>
+          <div style="background: #232329; color: #fff; padding: 22px 48px; border-radius: 14px; font-size:1.25rem; font-weight:700; box-shadow:0 2px 8px #1a1a1a11; min-width:160px; text-align:center;">Cursor</div>
+          <div style="background: #232329; color: #fff; padding: 22px 48px; border-radius: 14px; font-size:1.25rem; font-weight:700; box-shadow:0 2px 8px #1a1a1a11; min-width:160px; text-align:center;">VSCode</div>
+          <div style="background: #232329; color: #fff; padding: 22px 48px; border-radius: 14px; font-size:1.25rem; font-weight:700; box-shadow:0 2px 8px #1a1a1a11; min-width:160px; text-align:center;">Goose</div>
         </div>
-        <div style="background: #14532d; padding: 14px 24px; border-radius: 8px; font-weight:600; color: #bbf7d0; font-size:1.07rem;">
-          <span style="color:#22c55e;">No Setup Required:</span> This MCP server is hosted and publicly accessible. Just add the configuration and start asking questions!
+        <div style="background: #27643b; color: #fff; border-radius: 14px; padding: 26px 30px; text-align: center; font-size: 1.35rem; font-weight: 700;">
+          <span style="color:#bbf7d0; font-weight:800;">No Setup Required:</span> This MCP server is hosted and publicly accessible. Just add the configuration and start asking questions!
         </div>
       </div>
 
       <!-- What Can You Ask? -->
       <div style="margin: 64px 0 32px 0;">
-        <h2 style="font-size: 2rem; font-weight: 700; color: #fff;">What Can You Ask?</h2>
-        <p style="font-size: 1.1rem; color: #a1a1aa;">
+        <h2 style="font-size: 2rem; font-weight: 700; color: #fff; margin-bottom:18px;">What Can You Ask?</h2>
+        <p style="font-size: 1.1rem; color: #a1a1aa; line-height:1.7; margin-bottom:24px;">
           Here are some example queries you can try with your AI assistant once the MCP server is connected:
         </p>
         <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 20px; margin-top: 24px;">
