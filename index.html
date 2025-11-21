@@ -588,56 +588,75 @@
 
   <!-- ======= Start Contact Section ======= -->
 
-  <section id="mcp" class="contact">
+  <section id="mcp" class="contact" style="background: #18181b; color: #e4e4e7; padding: 60px 0 0 0;">
     <div class="container">
-      <div class="section-title">
-        <h2>MCP</h2>
-      </div>
-      <div class="row">
-        <div class="col-md-6 mt-4 mt-md-0 d-flex align-items-stretch">
-          <div class="info-box">
-            <i class="bx bx-share-alt"></i>
-            <h3 style="color:#12d640;">Social Profiles</h3>
-            <div class="social-links">
-              <a href="mailto:rliu6915@163.com" target="_blank" class="google"><i class="bx bxl-google"></i></a>
-              <!-- <a href="https://www.linkedin.com/in/arasgungore" target="_blank" class="linkedin"><i class="bx bxl-linkedin"></i></a> -->
-              <a href="https://github.com/rliu6915" target="_blank" class="github"><i class="bx bxl-github"></i></a>
-              <!-- <a href="https://www.hackerrank.com/arasgungore" target="_blank" class="hackerrank"><img class="svg" src="assets/img/social/hackerrank.svg" width="13" /></a>
-              <a href="https://leetcode.com/arasgungore" target="_blank" class="leetcode"><img class="svg" src="assets/img/social/leetcode.svg" width="13" /></a> -->
-            </div>
+      <!-- MCP Server Section -->
+      <div class="section-title" style="margin-bottom: 32px;">
+        <h2 style="font-size: 2.5rem; font-weight: 700; color: #fff; margin-bottom: 0;">Model Context Protocol (MCP)</h2>
+        <p style="font-size: 1.25rem; color: #a1a1aa; margin-bottom: 40px;">
+          Access my entire content ecosystem through AI. Connect your AI assistant to 21 tools across my YouTube videos, blog posts, speaking engagements, newsletters, and podcast episodes using the Model Context Protocol.
+        </p>
+        <div style="background: #27272a; border-radius: 12px; padding: 24px; margin-bottom: 32px;">
+          <div style="font-size: 1rem; color: #d4d4d8; margin-bottom: 4px;">MCP Server URL</div>
+          <div>
+            <a href="https://mcp.danielliu.dev/mcp" target="_blank" style="color: #60a5fa; font-size: 1.2rem; text-decoration: underline;">https://mcp.danielliu.dev/mcp</a>
           </div>
         </div>
-        <div class="col-md-6 mt-4 mt-md-0 d-flex align-items-stretch">
-          <div class="info-box">
-            <i class="bx bx-envelope"></i>
-            <h3 style="color:#12d640;">E&#8209;mail</h3>
-            <a href="mailto:rliu6915@163.com" target="_blank"> <p><i class="icofont-rounded-right"></i> rliu6915@163.com</p> </a>
-            <a href="mailto:rliu6915@connect.hku.hk" target="_blank"> <p><i class="icofont-rounded-right"></i> rliu6915@connect.hku.hk</p> </a>
-          </div>
+        <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+          <a href="https://github.com/danielliu" target="_blank" style="background: #2563eb; color: #fff; padding: 12px 32px; border-radius: 8px; font-weight: 600; text-decoration: none; font-size: 1rem;">View on GitHub</a>
+          <a href="#how-to-use" style="background: #27272a; color: #fff; padding: 12px 32px; border-radius: 8px; font-weight: 600; text-decoration: none; font-size: 1rem;">Get Started</a>
         </div>
       </div>
-      <form action="forms/contact.php" method="post" role="form" class="php-email-form mt-4">
-        <div class="row">
-          <div class="col-md-6 form-group">
-            <input type="text" name="name" class="form-control" id="name" placeholder="Your Name" required>
+
+      <!-- How to Use MCP -->
+      <div id="how-to-use" style="margin: 64px 0 32px 0;">
+        <h2 style="font-size: 2rem; font-weight: 700; color: #fff;">How to Use</h2>
+        <p style="font-size: 1.1rem; color: #a1a1aa;">
+          Connect this MCP server to your favorite AI assistant in minutes. No API keys required — the server is publicly accessible.
+        </p>
+        <h3 style="font-size: 1.1rem; color:#fff; font-weight: 600; margin-top: 24px;">Configuration</h3>
+        <div style="background: #232329; border-radius: 10px; padding: 22px; margin-bottom: 24px; font-family: monospace; color: #fff;">
+          <pre style="margin:0; color:#fff; font-size:1.1rem;">{
+    "mcpServers": {
+      "danielliu": {
+        "url": "https://mcp.danielliu.dev/mcp"
+      }
+    }
+  }</pre>
+        </div>
+        <h3 style="font-size: 1.1rem; color:#fff; font-weight: 600;">Compatible AI Tools</h3>
+        <div style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom: 18px;">
+          <div style="background: #232329; padding:12px 30px; border-radius:8px; font-weight:600;">Claude Desktop</div>
+          <div style="background: #232329; padding:12px 30px; border-radius:8px; font-weight:600;">Cursor</div>
+          <div style="background: #232329; padding:12px 30px; border-radius:8px; font-weight:600;">VSCode</div>
+          <div style="background: #232329; padding:12px 30px; border-radius:8px; font-weight:600;">Goose</div>
+        </div>
+        <div style="background: #14532d; padding: 14px 24px; border-radius: 8px; font-weight:600; color: #bbf7d0; font-size:1.07rem;">
+          <span style="color:#22c55e;">No Setup Required:</span> This MCP server is hosted and publicly accessible. Just add the configuration and start asking questions!
+        </div>
+      </div>
+
+      <!-- What Can You Ask? -->
+      <div style="margin: 64px 0 32px 0;">
+        <h2 style="font-size: 2rem; font-weight: 700; color: #fff;">What Can You Ask?</h2>
+        <p style="font-size: 1.1rem; color: #a1a1aa;">
+          Here are some example queries you can try with your AI assistant once the MCP server is connected:
+        </p>
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 20px; margin-top: 24px;">
+          <div style="background: linear-gradient(90deg, #232329 70%, #26263a); border-radius:12px; padding: 24px; color: #fff; font-size:1.1rem; font-weight:500;">
+            "What are daniel liu's latest Spring Boot tutorials on YouTube?"
           </div>
-          <div class="col-md-6 form-group mt-3 mt-md-0">
-            <input type="email" class="form-control" name="email" id="email" placeholder="Your E-mail" required>
+          <div style="background: linear-gradient(90deg, #232329 70%, #2b2640); border-radius:12px; padding: 24px; color: #fff; font-size:1.1rem; font-weight:500;">
+            "Find blog posts about Java virtual threads"
+          </div>
+          <div style="background: linear-gradient(90deg, #232329 70%, #162c26); border-radius:12px; padding: 24px; color: #fff; font-size:1.1rem; font-weight:500;">
+            "When is daniel liu speaking next and at which conferences?"
+          </div>
+          <div style="background: linear-gradient(90deg, #232329 70%, #2d2323); border-radius:12px; padding: 24px; color: #fff; font-size:1.1rem; font-weight:500;">
+            "Show me podcast episodes where daniel liu discusses AI and Spring"
           </div>
         </div>
-        <div class="form-group mt-3">
-          <input type="text" class="form-control" name="subject" id="subject" placeholder="Subject" required>
-        </div>
-        <div class="form-group mt-3">
-          <textarea class="form-control" name="message" rows="5" placeholder="Message" required></textarea>
-        </div>
-        <div class="my-3">
-          <div class="loading">Loading</div>
-          <div class="error-message"></div>
-          <div class="sent-message">Your message has been sent. Thank you!</div>
-        </div>
-        <div class="text-center"><button type="submit">Send Message</button></div>
-      </form>
+      </div>
     </div>
   </section>
 
