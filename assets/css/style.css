@@ -1153,16 +1153,4 @@ section .container {
 .blog-post .post-card code { background: rgba(255,255,255,.08); padding: 2px 5px; border-radius: 4px; font-size: .9em; }
 .blog-post .back-link { color: #12d640; display: inline-block; margin: 12px 0 0; }
 
-/* Blog post / blog-index pages are standalone (not the one-page app). Always show. */
-section.standalone {
-  position: static;
-  top: auto;
-  bottom: auto;
-  opacity: 1;
-  height: auto;
-  overflow: visible;
-  padding: 120px 0 40px;
-}
-/* Standalone pages use the compact fixed header (not the full-screen hero). */
-body:has(#header.header-top) #header { height: 90px; position: fixed; }
-body:has(#header.header-top) { padding-top: 90px; }
+

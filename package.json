@@ -1,0 +1,22 @@
+{
+  "name": "site_inspect",
+  "version": "1.0.0",
+  "description": "My portfolio website built using HTML, CSS, and JavaScript. You can check it out [here](https://rliu6915.github.io).",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rliu6915/rliu6915.github.io.git"
+  },
+  "keywords": [],
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/rliu6915/rliu6915.github.io/issues"
+  },
+  "homepage": "https://github.com/rliu6915/rliu6915.github.io#readme",
+  "dependencies": {
+    "playwright": "^1.62.1"
+  }
+}

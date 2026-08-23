@@ -86,7 +86,7 @@ cat > "$file" <<HTML
   <video class="background-image" src="../assets/img/background/binary_rain.mp4" muted loop autoplay></video>
 
   <!-- ======= Header ======= -->
-  <header id="header" class="header-tops">
+  <header id="header" class="header-top">
     <div class="container">
       <h1><a href="../index.html">Daniel Liu</a></h1>
       <h2 style="color:#fff">I am <span class="typing" style="color:#12D640"></span></h2>
@@ -107,7 +107,7 @@ cat > "$file" <<HTML
   <!-- ======= End Header ======= -->
 
   <!-- ======= Post ======= -->
-  <section id="post" class="blog-post">
+  <section id="post" class="blog-post section-show">
     <div class="container">
       <div class="post-card" data-aos="fade-up">
         <h1>$title</h1>
