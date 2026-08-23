@@ -70,18 +70,16 @@
       font-family: Raleway, sans-serif;
     }
 
-    /* Hero */
-    .hero-figure {
-      aspect-ratio: 16/9; border-radius: 10px; margin-bottom: 14px;
-      background:
-        radial-gradient(120% 120% at 0% 0%, rgba(18,214,64,.28), transparent 45%),
-        radial-gradient(120% 120% at 100% 100%, rgba(64,120,255,.22), transparent 50%),
-        linear-gradient(135deg, #0a2540, #04101f);
-      border: 1px solid var(--border);
+    /* Hero diagram */
+    .hero-diagram {
+      margin: 0 0 48px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 28px; overflow-x: auto;
     }
-    .figcaption {
+    .hero-diagram .mermaid { font-size: 15px; }
+    .hero-diagram figcaption {
       font-family: Raleway, -apple-system, system-ui, sans-serif;
-      font-size: 12.5px; color: var(--muted); margin: 0 0 48px; text-align: center;
+      font-size: 12.5px; color: var(--muted); margin-top: 14px; text-align: center;
     }
 
     /* Body */
@@ -213,9 +211,19 @@
       <span>By Daniel Liu · August 23, 2026 · 12 min read</span>
     </div>
 
-    <!-- Hero -->
-    <div class="hero-figure" data-od-id="hero"></div>
-    <p class="figcaption">Hermes's core layering: the Agent owns only one conversation; all complexity lives in the Gateway and the platform adapters.</p>
+    <!-- Hero diagram -->
+    <figure class="hero-diagram">
+      <pre class="mermaid">
+flowchart LR
+  U["User"] --> PA["Platform Adapters (WhatsApp, Telegram, ...)"]
+  PA --> GR["Gateway (orchestration, sessions, auth)"]
+  GR --> AG["AIAgent (one conversation loop)"]
+  AG --> GR
+  GR --> PA
+  PA --> U
+      </pre>
+      <figcaption>Hermes's core layering: the Agent owns only one conversation; all complexity lives in the Gateway and the platform adapters.</figcaption>
+    </figure>
 
     <!-- Body -->
     <div data-od-id="body">
@@ -238,7 +246,7 @@ flowchart LR
   GR -.->|"sync_turn"| MEM["MemoryManager + Providers"]
   GR -.->|"run_curator_review"| CUR["Curator"]
         </pre>
-        <figcaption>Figure 1 — The layering of Agent Core and Gateway. Adapters normalize events; GatewayRunner handles session/auth/commands; TurnRunner runs the loop.</figcaption>
+        <figcaption>Figure 1 — The same layering, now with real source coordinates. Adapters normalize events; GatewayRunner handles session/auth/commands; TurnRunner (gateway/run.py:5348) runs the loop.</figcaption>
       </figure>
 
       <h2>1. Message Gateway (the multi-platform bus)</h2>
@@ -301,29 +309,6 @@ flowchart LR
       <div class="bio">
         <strong>Daniel Liu</strong>
         Software engineer writing about AI agents, infrastructure, and the small tools that wire them into everyday chat apps. This blog is where I document what I learn by building.
-      </div>
-    </div>
-
-    <!-- Related -->
-    <div class="related" data-od-id="related">
-      <h4>Related Posts</h4>
-      <div class="grid">
-        <a class="card" href="../index.html#projects">
-          <div class="thumb"></div>
-          <div class="body">
-            <div class="title">Projects</div>
-            <div class="excerpt">A look at what I've built and what I'm building now.</div>
-            <div class="date">Home · Projects</div>
-          </div>
-        </a>
-        <a class="card" href="../index.html#skills">
-          <div class="thumb"></div>
-          <div class="body">
-            <div class="title">Skills</div>
-            <div class="excerpt">Tech stack and capability radar.</div>
-            <div class="date">Home · Skills</div>
-          </div>
-        </a>
       </div>
     </div>
 

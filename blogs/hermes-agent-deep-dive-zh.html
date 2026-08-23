@@ -70,18 +70,16 @@
       font-family: Raleway, sans-serif;
     }
 
-    /* Hero */
-    .hero-figure {
-      aspect-ratio: 16/9; border-radius: 10px; margin-bottom: 14px;
-      background:
-        radial-gradient(120% 120% at 0% 0%, rgba(18,214,64,.28), transparent 45%),
-        radial-gradient(120% 120% at 100% 100%, rgba(64,120,255,.22), transparent 50%),
-        linear-gradient(135deg, #0a2540, #04101f);
-      border: 1px solid var(--border);
+    /* Hero diagram */
+    .hero-diagram {
+      margin: 0 0 48px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 28px; overflow-x: auto;
     }
-    .figcaption {
+    .hero-diagram .mermaid { font-size: 15px; }
+    .hero-diagram figcaption {
       font-family: Raleway, -apple-system, system-ui, sans-serif;
-      font-size: 12.5px; color: var(--muted); margin: 0 0 48px; text-align: center;
+      font-size: 12.5px; color: var(--muted); margin-top: 14px; text-align: center;
     }
 
     /* Body */
@@ -213,9 +211,19 @@
       <span>By Daniel Liu · August 23, 2026 · 12 min read</span>
     </div>
 
-    <!-- Hero -->
-    <div class="hero-figure" data-od-id="hero"></div>
-    <p class="figcaption">Hermes 的核心分层：Agent 只管一次对话，复杂度全在 Gateway 与各平台适配器。</p>
+    <!-- Hero diagram -->
+    <figure class="hero-diagram">
+      <pre class="mermaid">
+flowchart LR
+  U["User"] --> PA["Platform Adapters (WhatsApp, Telegram, ...)"]
+  PA --> GR["Gateway (orchestration, sessions, auth)"]
+  GR --> AG["AIAgent (one conversation loop)"]
+  AG --> GR
+  GR --> PA
+  PA --> U
+      </pre>
+      <figcaption>Hermes 的核心分层：Agent 只管一次对话，复杂度全在 Gateway 与各平台适配器。</figcaption>
+    </figure>
 
     <!-- Body -->
     <div data-od-id="body">
@@ -238,7 +246,7 @@ flowchart LR
   GR -.->|"sync_turn"| MEM["MemoryManager + Providers"]
   GR -.->|"run_curator_review"| CUR["Curator"]
         </pre>
-        <figcaption>图 1 — Agent Core 与 Gateway 的分层全景。适配器归一化事件，GatewayRunner 做会话/授权/命令，TurnRunner 跑闭环。</figcaption>
+        <figcaption>图 1 — 同样是这个分层，但带上了真实源码坐标。适配器归一化事件；GatewayRunner 做会话/授权/命令；TurnRunner（gateway/run.py:5348）跑闭环。</figcaption>
       </figure>
 
       <h2>1. Message Gateway（多平台消息网关）</h2>
@@ -301,29 +309,6 @@ flowchart LR
       <div class="bio">
         <strong>Daniel Liu</strong>
         软件工程师，写 AI Agent、基础设施，以及把它们接进日常聊天软件的小工具。这个博客记录边做边学的东西。
-      </div>
-    </div>
-
-    <!-- Related -->
-    <div class="related" data-od-id="related">
-      <h4>Related Posts</h4>
-      <div class="grid">
-        <a class="card" href="../index.html#projects">
-          <div class="thumb"></div>
-          <div class="body">
-            <div class="title">Projects</div>
-            <div class="excerpt">我做过和正在做的项目一览。</div>
-            <div class="date">主页 · Projects</div>
-          </div>
-        </a>
-        <a class="card" href="../index.html#skills">
-          <div class="thumb"></div>
-          <div class="body">
-            <div class="title">Skills</div>
-            <div class="excerpt">技术栈与能力雷达。</div>
-            <div class="date">主页 · Skills</div>
-          </div>
-        </a>
       </div>
     </div>
 
