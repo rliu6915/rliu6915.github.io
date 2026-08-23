@@ -1152,3 +1152,14 @@ section .container {
 .blog-post .post-card pre { background: #010e1b; padding: 16px; border-radius: 6px; overflow: auto; color: #cfe; font-size: .9rem; }
 .blog-post .post-card code { background: rgba(255,255,255,.08); padding: 2px 5px; border-radius: 4px; font-size: .9em; }
 .blog-post .back-link { color: #12d640; display: inline-block; margin: 12px 0 0; }
+
+/* Blog post / blog-index pages are standalone (not the one-page app). Always show. */
+section.standalone {
+  position: static;
+  top: auto;
+  bottom: auto;
+  opacity: 1;
+  height: auto;
+  overflow: visible;
+  padding: 90px 0 40px;
+}
