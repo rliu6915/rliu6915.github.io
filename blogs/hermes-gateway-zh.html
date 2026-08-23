@@ -204,6 +204,11 @@
     .series a { color: var(--muted); text-decoration: none; }
     .series a:hover { color: var(--accent); }
     .series a.cur { color: var(--accent); font-weight: 600; }
+
+    pre.src { background: #0e1117; border: 1px solid var(--border); border-radius: 10px;
+      padding: 18px 20px; overflow-x: auto; margin: 22px 0; }
+    pre.src code { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 13px; line-height: 1.7; color: #d7dde8; white-space: pre; }
 </style>
 </head>
 <body>
@@ -273,6 +278,20 @@ flowchart TD
         <li><strong>内部两层：</strong>会话路由（解析/加锁/审批）与 TurnRunner（跑循环）——协议复杂度永不触及 agent 核心。</li>
         <li><strong>分层是为了缓存：</strong>"纯一次对话循环"的 agent，才让 prompt caching 在 20+ 平台间不被破坏。</li>
       </ul>
+      <h2>源码走读：入口契约到底长什么样</h2>
+      <p>上面说 <code>handle_message</code> 只做归一化。它真实的样子（<code>gateway/platforms/base.py:6045</code>）——注意它<strong>立刻 return</strong>，因为真正的处理被 spawn 成后台任务，好让消息能一边跑 agent 一边被新消息打断：</p>
+      <pre class="src"><code>async def handle_message(self, event: MessageEvent) -> None:
+    """Process an incoming message. Returns quickly by spawning
+    background tasks, so new messages can be processed even while an
+    agent is running (interruption support)."""
+    if not self._message_handler:
+        return
+    if event.allow_gateway_control:
+        coerce_plaintext_gateway_command(event)
+    # ... Telegram topic recovery, then build the session_key ...
+    session_key = build_session_key(event.source, ...)
+    # route into GatewayRunner._handle_message(event, session_key, ...)</code></pre>
+      <p>关键在 <code>build_session_key(event.source, ...)</code>：同一平台同一会话永远算出同一个 key，这正是下一层"按会话路由"的依据。适配器到此交权，后面全归 Gateway。</p>
     </div>
         <div class="author">
       <div class="avatar">DL</div>

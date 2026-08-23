@@ -17,6 +17,13 @@ SERIES_CSS = """
     .series a.cur { color: var(--accent); font-weight: 600; }
 """
 
+SRC_CSS = """
+    pre.src { background: #0e1117; border: 1px solid var(--border); border-radius: 10px;
+      padding: 18px 20px; overflow-x: auto; margin: 22px 0; }
+    pre.src code { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 13px; line-height: 1.7; color: #d7dde8; white-space: pre; }
+"""
+
 NAV = """    <nav class="top">
       <span class="wordmark">Daniel Liu</span>
       <a href="../index.html">Home</a>
@@ -59,20 +66,22 @@ def series(cur, lang):
     parts = []
     for s in order:
         cls = ' class="cur"' if s==cur else ''
-        parts.append('<a href="hermes-%s.%s"%s>%s</a>' % (s, 'html' if lang=='en' else 'html', cls, label[s]))
+        parts.append('<a href="hermes-%s.html"%s>%s</a>' % (s, cls, label[s]))
     prefix = 'Part of a 4-part series: ' if lang=='en' else '本系列共 4 篇：'
-    return '<p class="series">%s%s</p>' % (prefix, parts) if False else '<p class="series">%s%s</p>' % (prefix, ' &middot; '.join(parts))
+    return '<p class="series">%s%s</p>' % (prefix, ' &middot; '.join(parts))
 
 # ---------- content ----------
+# NOTE: hero/body/code use ''' (single-quote triple) because code blocks embed
+# Python docstrings written with """ (double-quote triple) — they must not clash.
 CONTENT = {
  'gateway': {
-  'en': dict(
-    title='The Message Gateway: Decoupling Platforms from the Agent',
-    desc='How Hermes turns 20+ chat platforms into one normalized event stream — and why the Gateway owns protocol complexity while the Agent owns a single conversation loop.',
-    eyebrow='Architecture &middot; Part 1 of 4',
-    h1='The Message Gateway: Decoupling Platforms from the Agent',
-    deck='A source-grounded look at the entry contract every platform adapter shares, and the two layers inside GatewayRunner that keep platform protocol complexity away from the agent core.',
-    hero='''    <figure class="hero-diagram">
+  'en': {
+    'title': 'The Message Gateway: Decoupling Platforms from the Agent',
+    'desc': 'How Hermes turns 20+ chat platforms into one normalized event stream — and why the Gateway owns protocol complexity while the Agent owns a single conversation loop.',
+    'eyebrow': 'Architecture &middot; Part 1 of 4',
+    'h1': 'The Message Gateway: Decoupling Platforms from the Agent',
+    'deck': 'A source-grounded look at the entry contract every platform adapter shares, and the two layers inside GatewayRunner that keep platform protocol complexity away from the agent core.',
+    'hero': '''    <figure class="hero-diagram">
       <pre class="mermaid">
 flowchart LR
   U["User"] --> PA["Platform Adapters (WhatsApp, Telegram, ...)"]
@@ -84,7 +93,7 @@ flowchart LR
       </pre>
       <figcaption>The core layering: the Agent owns only one conversation; all platform complexity lives in the Gateway and its adapters.</figcaption>
     </figure>''',
-    body='''      <p>This is part 1 of a 4-part architecture series on Hermes Agent, based on the <strong>real source</strong> (repo <code>hermes-agent</code>). The series: (1) Message Gateway, (2) WhatsApp, (3) Self-Improving, (4) Long-Term Memory. Here we open with the piece everything else hangs off: how a message from any of ~20 platforms becomes one normalized event the agent can reason about.</p>
+    'body': '''      <p>This is part 1 of a 4-part architecture series on Hermes Agent, based on the <strong>real source</strong> (repo <code>hermes-agent</code>). The series: (1) Message Gateway, (2) WhatsApp, (3) Self-Improving, (4) Long-Term Memory. Here we open with the piece everything else hangs off: how a message from any of ~20 platforms becomes one normalized event the agent can reason about.</p>
 
       <h2>The entry contract</h2>
       <p>Every platform adapter — Telegram, Discord, Slack, WhatsApp, Signal, and the rest — extends <code>BasePlatformAdapter.handle_message(event)</code> (<code>gateway/platforms/base.py:6045</code>). The adapter's only job is to <strong>normalize</strong> the platform's raw message into a <code>MessageEvent</code> and hand it to <code>GatewayRunner._handle_message</code> (<code>gateway/run.py:16462</code>). That normalization is the seam: the agent never sees a Telegram update vs. a WhatsApp webhook — it only ever sees a <code>MessageEvent</code>.</p>
@@ -121,14 +130,29 @@ flowchart TD
         <li><strong>One contract, many platforms:</strong> <code>BasePlatformAdapter.handle_message</code> is the only seam; adapters normalize, the agent stays platform-blind.</li>
         <li><strong>Two internal layers:</strong> session routing (resolve/lock/approve) vs. TurnRunner (run the loop) — protocol complexity never reaches the agent core.</li>
         <li><strong>Caching is the reason:</strong> a pure "one conversation loop" agent is what lets prompt caching stay intact across 20+ platforms.</li>
-      </ul>'''),
-  'zh': dict(
-    title='消息网关：把平台与 Agent 彻底解耦',
-    desc='Hermes 如何把 20+ 聊天平台归一化成一条事件流——以及为什么 Gateway 承担协议复杂度，而 Agent 只跑一次对话循环。',
-    eyebrow='架构 &middot; 第 1 / 4 篇',
-    h1='消息网关：把平台与 Agent 彻底解耦',
-    deck='基于真实源码：每个平台适配器共享的入口契约，以及 GatewayRunner 内部把"协议复杂度"挡在 agent 核心之外的两层结构。',
-    hero='''    <figure class="hero-diagram">
+      </ul>''',
+    'code': '''      <h2>Source walkthrough: what the entry contract actually looks like</h2>
+      <p>Above we said <code>handle_message</code> only normalizes. Here it is for real (<code>gateway/platforms/base.py:6045</code>) — note it <strong>returns immediately</strong>, because the real work is spawned as a background task so a new message can interrupt a running agent:</p>
+      <pre class="src"><code>async def handle_message(self, event: MessageEvent) -> None:
+    """Process an incoming message. Returns quickly by spawning
+    background tasks, so new messages can be processed even while an
+    agent is running (interruption support)."""
+    if not self._message_handler:
+        return
+    if event.allow_gateway_control:
+        coerce_plaintext_gateway_command(event)
+    # ... Telegram topic recovery, then build the session_key ...
+    session_key = build_session_key(event.source, ...)
+    # route into GatewayRunner._handle_message(event, session_key, ...)</code></pre>
+      <p>The important line is <code>build_session_key(event.source, ...)</code>: the same platform + chat always yields the same key, which is exactly what the next layer routes on. The adapter hands off here; everything after belongs to the Gateway.</p>''',
+  },
+  'zh': {
+    'title': '消息网关：把平台与 Agent 彻底解耦',
+    'desc': 'Hermes 如何把 20+ 聊天平台归一化成一条事件流——以及为什么 Gateway 承担协议复杂度，而 Agent 只跑一次对话循环。',
+    'eyebrow': '架构 &middot; 第 1 / 4 篇',
+    'h1': '消息网关：把平台与 Agent 彻底解耦',
+    'deck': '基于真实源码：每个平台适配器共享的入口契约，以及 GatewayRunner 内部把"协议复杂度"挡在 agent 核心之外的两层结构。',
+    'hero': '''    <figure class="hero-diagram">
       <pre class="mermaid">
 flowchart LR
   U["User"] --> PA["Platform Adapters (WhatsApp, Telegram, ...)"]
@@ -140,7 +164,7 @@ flowchart LR
       </pre>
       <figcaption>核心分层：Agent 只管一次对话，所有平台复杂度都在 Gateway 与各适配器里。</figcaption>
     </figure>''',
-    body='''      <p>这是 Hermes Agent 架构系列的第 1 / 4 篇，基于<strong>真实源码</strong>（仓库 <code>hermes-agent</code>）。四篇分别是：(1) 消息网关、(2) WhatsApp、(3) 自我进化、(4) 长期记忆。开篇先讲承载其余一切的这块：任意约 20 个平台的消息，如何变成 agent 能推理的一条归一化事件。</p>
+    'body': '''      <p>这是 Hermes Agent 架构系列的第 1 / 4 篇，基于<strong>真实源码</strong>（仓库 <code>hermes-agent</code>）。四篇分别是：(1) 消息网关、(2) WhatsApp、(3) 自我进化、(4) 长期记忆。开篇先讲承载其余一切的这块：任意约 20 个平台的消息，如何变成 agent 能推理的一条归一化事件。</p>
 
       <h2>入口契约</h2>
       <p>每个平台适配器——Telegram、Discord、Slack、WhatsApp、Signal 等——都继承 <code>BasePlatformAdapter.handle_message(event)</code>（<code>gateway/platforms/base.py:6045</code>）。适配器的唯一职责是把平台原始消息<strong>归一化</strong>成 <code>MessageEvent</code>，交给 <code>GatewayRunner._handle_message</code>（<code>gateway/run.py:16462</code>）。这条归一化就是接缝：agent 从来看不到"Telegram 更新 vs WhatsApp webhook"的区别，它只看到 <code>MessageEvent</code>。</p>
@@ -177,16 +201,31 @@ flowchart TD
         <li><strong>一个契约，多平台：</strong><code>BasePlatformAdapter.handle_message</code> 是唯一的接缝；适配器归一化，agent 对平台无感。</li>
         <li><strong>内部两层：</strong>会话路由（解析/加锁/审批）与 TurnRunner（跑循环）——协议复杂度永不触及 agent 核心。</li>
         <li><strong>分层是为了缓存：</strong>"纯一次对话循环"的 agent，才让 prompt caching 在 20+ 平台间不被破坏。</li>
-      </ul>'''),
+      </ul>''',
+    'code': '''      <h2>源码走读：入口契约到底长什么样</h2>
+      <p>上面说 <code>handle_message</code> 只做归一化。它真实的样子（<code>gateway/platforms/base.py:6045</code>）——注意它<strong>立刻 return</strong>，因为真正的处理被 spawn 成后台任务，好让消息能一边跑 agent 一边被新消息打断：</p>
+      <pre class="src"><code>async def handle_message(self, event: MessageEvent) -> None:
+    """Process an incoming message. Returns quickly by spawning
+    background tasks, so new messages can be processed even while an
+    agent is running (interruption support)."""
+    if not self._message_handler:
+        return
+    if event.allow_gateway_control:
+        coerce_plaintext_gateway_command(event)
+    # ... Telegram topic recovery, then build the session_key ...
+    session_key = build_session_key(event.source, ...)
+    # route into GatewayRunner._handle_message(event, session_key, ...)</code></pre>
+      <p>关键在 <code>build_session_key(event.source, ...)</code>：同一平台同一会话永远算出同一个 key，这正是下一层"按会话路由"的依据。适配器到此交权，后面全归 Gateway。</p>''',
+  },
  },
  'whatsapp': {
-  'en': dict(
-    title='WhatsApp Integration: Cloud API, Webhooks, and Failure Isolation',
-    desc='Walking the Meta Cloud API path: webhook ingestion, Graph API delivery, and the three engineering details that keep a group chat from becoming a spam bot.',
-    eyebrow='Architecture &middot; Part 2 of 4',
-    h1='WhatsApp Integration: Cloud API, Webhooks, Failure Isolation',
-    deck='A source-grounded walk through Hermes\'s WhatsApp path — and the retry-, failure-, and mention-handling details that make it safe in a busy group chat.',
-    hero='''    <figure class="hero-diagram">
+  'en': {
+    'title': 'WhatsApp Integration: Cloud API, Webhooks, and Failure Isolation',
+    'desc': 'Walking the Meta Cloud API path: webhook ingestion, Graph API delivery, and the three engineering details that keep a group chat from becoming a spam bot.',
+    'eyebrow': 'Architecture &middot; Part 2 of 4',
+    'h1': 'WhatsApp Integration: Cloud API, Webhooks, and Failure Isolation',
+    'deck': "A source-grounded walk through Hermes's WhatsApp path — and the retry-, failure-, and mention-handling details that make it safe in a busy group chat.",
+    'hero': '''    <figure class="hero-diagram">
       <pre class="mermaid">
 flowchart LR
   M["Meta Webhook"] -->|"POST message"| C["WhatsAppCloudAdapter.connect()"]
@@ -198,7 +237,7 @@ flowchart LR
       </pre>
       <figcaption>The WhatsApp path: a webhook delivers inbound messages; the Graph API carries replies back out.</figcaption>
     </figure>''',
-    body='''      <p>This is part 2 of a 4-part series (1: Message Gateway, 2: WhatsApp, 3: Self-Improving, 4: Long-Term Memory), based on the <strong>real source</strong> of <code>hermes-agent</code>. Here we go one level down into a concrete adapter: WhatsApp, which rides Meta's <strong>Cloud API</strong>.</p>
+    'body': '''      <p>This is part 2 of a 4-part series (1: Message Gateway, 2: WhatsApp, 3: Self-Improving, 4: Long-Term Memory), based on the <strong>real source</strong> of <code>hermes-agent</code>. Here we go one level down into a concrete adapter: WhatsApp, which rides Meta's <strong>Cloud API</strong>.</p>
 
       <h2>The Cloud API shape</h2>
       <p>WhatsApp uses a webhook to <em>receive</em> messages and the Graph API to <em>send</em> them. <code>WhatsAppCloudAdapter.connect()</code> (<code>gateway/platforms/whatsapp_cloud.py:435</code>) registers the webhook verification handshake and the inbound message callback. Once verified, every user message arrives as a webhook POST, gets normalized into a <code>MessageEvent</code>, and flows into the GatewayRunner we covered in part 1.</p>
@@ -232,14 +271,29 @@ flowchart TD
         <li><strong>Retry-resistance:</strong> <code>_dedup_wamid</code> stops redelivery from producing duplicate replies.</li>
         <li><strong>Failure containment:</strong> a failed <code>send()</code> logs and moves on — one bad message never kills the loop.</li>
         <li><strong>Mention gating:</strong> only @-mentions get a reply in groups, keeping it a helper, not a spammer.</li>
-      </ul>'''),
-  'zh': dict(
-    title='WhatsApp 接入：Cloud API、Webhook 与失败隔离',
-    desc='走一遍 Meta Cloud API 路径：webhook 收消息、Graph API 发消息，以及让群聊不至于变成垃圾机器人的三个工程细节。',
-    eyebrow='架构 &middot; 第 2 / 4 篇',
-    h1='WhatsApp 接入：Cloud API、Webhook 与失败隔离',
-    deck='基于真实源码拆解 Hermes 的 WhatsApp 路径——以及抗重试、抗错误扩散、@ 提及门控这些让它在嘈杂群聊里安全的细节。',
-    hero='''    <figure class="hero-diagram">
+      </ul>''',
+    'code': '''      <h2>Source walkthrough: what connect() actually sets up</h2>
+      <p>The article names <code>WhatsAppCloudAdapter.connect()</code> (<code>gateway/platforms/whatsapp_cloud.py:435</code>) as the wiring point. For real, it first <strong>refuses to start</strong> if deps or config are missing, then builds the two transports — an inbound webhook server and an outbound <code>httpx</code> client:</p>
+      <pre class="src"><code>async def connect(self, *, is_reconnect: bool = False) -> bool:
+    if not check_whatsapp_cloud_requirements():
+        self._set_fatal_error("whatsapp_cloud_deps_missing", ...)
+        return False
+    if not self._phone_number_id or not self._access_token:
+        self._set_fatal_error("whatsapp_cloud_unconfigured", ...)
+        return False
+    # Outbound HTTP client with tight keepalive.
+    self._http_client = httpx.AsyncClient(
+        timeout=30.0, limits=platform_httpx_limits())
+    # Inbound webhook server next ...</code></pre>
+      <p>Note the two <strong>fail-closed</strong> guards up front: a missing dependency or an unconfigured phone number id / token stops the adapter before it can half-start. That discipline is what keeps a misconfigured bot from silently eating webhooks.</p>''',
+  },
+  'zh': {
+    'title': 'WhatsApp 接入：Cloud API、Webhook 与失败隔离',
+    'desc': '走一遍 Meta Cloud API 路径：webhook 收消息、Graph API 发消息，以及让群聊不至于变成垃圾机器人的三个工程细节。',
+    'eyebrow': '架构 &middot; 第 2 / 4 篇',
+    'h1': 'WhatsApp 接入：Cloud API、Webhook 与失败隔离',
+    'deck': '基于真实源码拆解 Hermes 的 WhatsApp 路径——以及抗重试、抗错误扩散、@ 提及门控这些让它在嘈杂群聊里安全的细节。',
+    'hero': '''    <figure class="hero-diagram">
       <pre class="mermaid">
 flowchart LR
   M["Meta Webhook"] -->|"POST message"| C["WhatsAppCloudAdapter.connect()"]
@@ -251,7 +305,7 @@ flowchart LR
       </pre>
       <figcaption>WhatsApp 路径：webhook 收消息，Graph API 把回复发回去。</figcaption>
     </figure>''',
-    body='''      <p>这是 4 篇系列的第 2 / 4 篇（1 消息网关、2 WhatsApp、3 自我进化、4 长期记忆），基于 <code>hermes-agent</code> 的<strong>真实源码</strong>。这里下钻到一个具体适配器：走 Meta <strong>Cloud API</strong> 的 WhatsApp。</p>
+    'body': '''      <p>这是 4 篇系列的第 2 / 4 篇（1 消息网关、2 WhatsApp、3 自我进化、4 长期记忆），基于 <code>hermes-agent</code> 的<strong>真实源码</strong>。这里下钻到一个具体适配器：走 Meta <strong>Cloud API</strong> 的 WhatsApp。</p>
 
       <h2>Cloud API 的形态</h2>
       <p>WhatsApp 用 webhook <em>收</em>消息、用 Graph API <em>发</em>消息。<code>WhatsAppCloudAdapter.connect()</code>（<code>gateway/platforms/whatsapp_cloud.py:435</code>）注册 webhook 校验握手与入站消息回调。校验通过后，每条用户消息以 webhook POST 到达，被归一化成 <code>MessageEvent</code>，流入第 1 篇讲的 GatewayRunner。</p>
@@ -285,16 +339,31 @@ flowchart TD
         <li><strong>抗重试：</strong><code>_dedup_wamid</code> 阻止重复投递产生重复回复。</li>
         <li><strong>失败隔离：</strong><code>send()</code> 失败只记日志不抛出——一条坏消息永不拖垮循环。</li>
         <li><strong>@ 门控：</strong>群里只有被 @ 才回，保持帮手定位，不做喷子。</li>
-      </ul>'''),
+      </ul>''',
+    'code': '''      <h2>源码走读：connect() 到底搭了什么</h2>
+      <p>文章把 <code>WhatsAppCloudAdapter.connect()</code>（<code>gateway/platforms/whatsapp_cloud.py:435</code>）称作接线点。真实情况是：它先<strong>拒绝启动</strong>（缺依赖或配置缺失就返回），再建两条传输——入站 webhook 服务、出站 <code>httpx</code> 客户端：</p>
+      <pre class="src"><code>async def connect(self, *, is_reconnect: bool = False) -> bool:
+    if not check_whatsapp_cloud_requirements():
+        self._set_fatal_error("whatsapp_cloud_deps_missing", ...)
+        return False
+    if not self._phone_number_id or not self._access_token:
+        self._set_fatal_error("whatsapp_cloud_unconfigured", ...)
+        return False
+    # Outbound HTTP client with tight keepalive.
+    self._http_client = httpx.AsyncClient(
+        timeout=30.0, limits=platform_httpx_limits())
+    # Inbound webhook server next ...</code></pre>
+      <p>注意开头的两道<strong>失败即停</strong>护栏：缺依赖、或 phone number id / token 没配，适配器在半启动前就停下。正是这份纪律，让一个配错的 bot 不会默默吞掉 webhook。</p>''',
+  },
  },
  'self-improving': {
-  'en': dict(
-    title='Self-Improving: Crystallizing Experience into Skills',
-    desc='The most-misread part of Hermes. Self-improvement is not the model editing code — it is the Curator turning hard-won experience into reusable skills.',
-    eyebrow='Architecture &middot; Part 3 of 4',
-    h1='Self-Improving: Crystallizing Experience into Skills',
-    deck='A source-grounded look at the Curator — a pure-function state machine that turns experience into skills, with optional LLM merge and zero cost by default.',
-    hero='''    <figure class="hero-diagram">
+  'en': {
+    'title': 'Self-Improving: Crystallizing Experience into Skills',
+    'desc': 'The most-misread part of Hermes. Self-improvement is not the model editing code — it is the Curator turning hard-won experience into reusable skills.',
+    'eyebrow': 'Architecture &middot; Part 3 of 4',
+    'h1': 'Self-Improving: Crystallizing Experience into Skills',
+    'deck': 'A source-grounded look at the Curator — a pure-function state machine that turns experience into skills, with optional LLM merge and zero cost by default.',
+    'hero': '''    <figure class="hero-diagram">
       <pre class="mermaid">
 flowchart LR
   EXP["Hard-won experience"] --> SK["Skill (SKILL.md)"]
@@ -304,7 +373,7 @@ flowchart LR
       </pre>
       <figcaption>Self-improving is experience → skill → curator. The model never edits agent code.</figcaption>
     </figure>''',
-    body='''      <p>This is part 3 of a 4-part series (1: Message Gateway, 2: WhatsApp, 3: Self-Improving, 4: Long-Term Memory), based on the <strong>real source</strong> of <code>hermes-agent</code>. This is the most commonly misread part of the system, so let's be precise.</p>
+    'body': '''      <p>This is part 3 of a 4-part series (1: Message Gateway, 2: WhatsApp, 3: Self-Improving, 4: Long-Term Memory), based on the <strong>real source</strong> of <code>hermes-agent</code>. This is the most commonly misread part of the system, so let's be precise.</p>
 
       <h2>What "self-improving" actually means</h2>
       <p>Hermes's self-improvement does <strong>not</strong> let the model edit its own source online. Instead, it <strong>crystallizes reusable experience into a skill</strong> — procedural knowledge in <code>SKILL.md</code> form — and a background <strong>Curator</strong> keeps that collection healthy. The agent gets smarter by accumulating vetted playbooks, not by rewriting itself.</p>
@@ -339,14 +408,31 @@ flowchart TD
         <li><strong>Pure-function curator:</strong> <code>run_curator_review</code> is deterministic and testable.</li>
         <li><strong>Zero cost by default:</strong> LLM is used only for genuine semantic merges.</li>
         <li><strong>Safe by design:</strong> dry-run preview + pinned-skills-untouched keep curation from destroying hand-written content.</li>
-      </ul>'''),
-  'zh': dict(
-    title='自我进化：把经验固化为 Skill',
-    desc='Hermes 最常被误读的部分。自我进化不是让模型改自己的代码，而是 Curator 把来之不易的经验固化成可复用的 skill。',
-    eyebrow='架构 &middot; 第 3 / 4 篇',
-    h1='自我进化：把经验固化为 Skill',
-    deck='基于真实源码看 Curator——一个纯函数状态机，把经验变成 skill，默认零成本、可选 LLM 合并。',
-    hero='''    <figure class="hero-diagram">
+      </ul>''',
+    'code': '''      <h2>Source walkthrough: what run_curator_review does</h2>
+      <p>The article calls <code>run_curator_review</code> (<code>agent/curator.py:1511</code>) a pure-function state machine. For real, the function signature shows its knobs: a synchronous/daemon choice, a dry-run that reports without mutating, and a <code>consolidate</code> flag that gates the LLM umbrella-building pass:</p>
+      <pre class="src"><code>def run_curator_review(
+    on_summary=None, synchronous=False,
+    dry_run=False, consolidate=None) -> Dict[str, Any]:
+    """Execute a single curator review pass.
+      1. Apply automatic state transitions (pure, no LLM).
+      2. If consolidation enabled AND agent-created skills exist,
+         spawn a forked AIAgent for the LLM review prompt.
+      3. Update .curator_state with last_run_at + summary.
+      4. Invoke on_summary with a user-visible description.
+    """
+    if consolidate is None:
+        consolidate = get_consolidate()   # OFF by default
+    ...</code></pre>
+      <p>The comment on step 2 is the key: <strong>"consolidate OFF by default"</strong> means the forked LLM review is skipped entirely on a normal run — only the deterministic inactivity prune runs. That is exactly why the default costs zero tokens.</p>''',
+  },
+  'zh': {
+    'title': '自我进化：把经验固化为 Skill',
+    'desc': 'Hermes 最常被误读的部分。自我进化不是让模型改自己的代码，而是 Curator 把来之不易的经验固化成可复用的 skill。',
+    'eyebrow': '架构 &middot; 第 3 / 4 篇',
+    'h1': '自我进化：把经验固化为 Skill',
+    'deck': '基于真实源码看 Curator——一个纯函数状态机，把经验变成 skill，默认零成本、可选 LLM 合并。',
+    'hero': '''    <figure class="hero-diagram">
       <pre class="mermaid">
 flowchart LR
   EXP["Hard-won experience"] --> SK["Skill (SKILL.md)"]
@@ -356,7 +442,7 @@ flowchart LR
       </pre>
       <figcaption>自我进化是 经验 → skill → curator。模型从不去改 agent 代码。</figcaption>
     </figure>''',
-    body='''      <p>这是 4 篇系列的第 3 / 4 篇（1 消息网关、2 WhatsApp、3 自我进化、4 长期记忆），基于 <code>hermes-agent</code> 的<strong>真实源码</strong>。这是系统里最常被误读的一块，所以务必精确。</p>
+    'body': '''      <p>这是 4 篇系列的第 3 / 4 篇（1 消息网关、2 WhatsApp、3 自我进化、4 长期记忆），基于 <code>hermes-agent</code> 的<strong>真实源码</strong>。这是系统里最常被误读的一块，所以务必精确。</p>
 
       <h2>"自我进化"到底指什么</h2>
       <p>Hermes 的自我进化<strong>不是</strong>让模型在线改自己的源码，而是把<strong>可复用的经验固化为 skill</strong>——<code>SKILL.md</code> 形式的流程知识——再由后台 <strong>Curator</strong> 维护这套收藏的健康度。agent 是通过积累经过把关的 playbook 变聪明，而不是靠重写自己。</p>
@@ -391,16 +477,33 @@ flowchart TD
         <li><strong>纯函数 curtor：</strong><code>run_curator_review</code> 确定且可测。</li>
         <li><strong>默认零成本：</strong>只有真正的语义合并才用 LLM。</li>
         <li><strong>设计即安全：</strong>dry-run 预演 + pinned 不动，策展不会毁掉手写内容。</li>
-      </ul>'''),
+      </ul>''',
+    'code': '''      <h2>源码走读：run_curator_review 做什么</h2>
+      <p>文章称 <code>run_curator_review</code>（<code>agent/curator.py:1511</code>）是纯函数状态机。真实签名露出它的旋钮：同步/守护进程选择、dry-run 只报告不改动、<code>consolidate</code> 开关门控 LLM 合并：</p>
+      <pre class="src"><code>def run_curator_review(
+    on_summary=None, synchronous=False,
+    dry_run=False, consolidate=None) -> Dict[str, Any]:
+    """Execute a single curator review pass.
+      1. Apply automatic state transitions (pure, no LLM).
+      2. If consolidation enabled AND agent-created skills exist,
+         spawn a forked AIAgent for the LLM review prompt.
+      3. Update .curator_state with last_run_at + summary.
+      4. Invoke on_summary with a user-visible description.
+    """
+    if consolidate is None:
+        consolidate = get_consolidate()   # 默认 OFF
+    ...</code></pre>
+      <p>第 2 步的注释是关键：<strong>"consolidate 默认 OFF"</strong> 意味着普通运行完全跳过 fork 出来的 LLM 评审——只跑确定性的闲置 prune。这正解释了为什么默认零 token。</p>''',
+  },
  },
  'memory': {
-  'en': dict(
-    title='Long-Term Memory: Facts on Disk, Sessions in FTS5',
-    desc='Two memory tracks: durable facts through MemoryManager to Provider (and the simplest MemoryStore writing MEMORY.md), and cross-session recall through SessionDB + FTS5.',
-    eyebrow='Architecture &middot; Part 4 of 4',
-    h1='Long-Term Memory: Facts on Disk, Sessions in FTS5',
-    deck='A source-grounded tour of Hermes\'s two memory tracks — fact memory written to disk, and session memory indexed for cross-session search.',
-    hero='''    <figure class="hero-diagram">
+  'en': {
+    'title': 'Long-Term Memory: Facts on Disk, Sessions in FTS5',
+    'desc': 'Two memory tracks: durable facts through MemoryManager to Provider (and the simplest MemoryStore writing MEMORY.md), and cross-session recall through SessionDB + FTS5.',
+    'eyebrow': 'Architecture &middot; Part 4 of 4',
+    'h1': 'Long-Term Memory: Facts on Disk, Sessions in FTS5',
+    'deck': "A source-grounded tour of Hermes's two memory tracks — fact memory written to disk, and session memory indexed for cross-session search.",
+    'hero': '''    <figure class="hero-diagram">
       <pre class="mermaid">
 flowchart LR
   F["Fact memory"] --> MM["MemoryManager → Provider"]
@@ -411,7 +514,7 @@ flowchart LR
       </pre>
       <figcaption>Two tracks: facts land on disk; sessions get a full-text index for cross-session retrieval.</figcaption>
     </figure>''',
-    body='''      <p>This is part 4 of 4 (1: Message Gateway, 2: WhatsApp, 3: Self-Improving, 4: Long-Term Memory), based on the <strong>real source</strong> of <code>hermes-agent</code>. Memory runs on two independent tracks.</p>
+    'body': '''      <p>This is part 4 of 4 (1: Message Gateway, 2: WhatsApp, 3: Self-Improving, 4: Long-Term Memory), based on the <strong>real source</strong> of <code>hermes-agent</code>. Memory runs on two independent tracks.</p>
 
       <h2>Fact memory</h2>
       <p>Facts flow through <code>MemoryManager → MemoryProvider</code> — a background thread, serial, de-noised. The simplest implementation, <code>MemoryStore</code> (<code>tools/memory_tool.py:159</code>), writes <code>MEMORY.md</code> straight to disk via <code>save_to_disk()</code> (<code>:387</code>). This is the durable "what I know about the user" store.</p>
@@ -443,14 +546,41 @@ flowchart LR
         <li><strong>FTS5 + CJK:</strong> <code>messages_fts_cjk</code> is what makes <code>session_search</code> work across sessions, including Chinese text.</li>
         <li><strong>Concurrency fixed:</strong> the write path now reloads once and checks drift + parses on one snapshot, closing the clobber race.</li>
       </ul>
-      <p style="color:var(--muted);font-size:14px;">This closes the 4-part series. Every <code>file:line</code> reference comes from the current <code>hermes-agent</code> source and can be used as a coordinate to read along.</p>'''),
-  'zh': dict(
-    title='长期记忆：事实落盘，会话进 FTS5',
-    desc='两条记忆线：事实经 MemoryManager → Provider 落盘（最朴素的 MemoryStore 写 MEMORY.md），会话经 SessionDB + FTS5 支持跨会话检索。',
-    eyebrow='架构 &middot; 第 4 / 4 篇',
-    h1='长期记忆：事实落盘，会话进 FTS5',
-    deck='基于真实源码拆解 Hermes 的两条记忆线——写盘的事实记忆，与建全文索引、可跨会话检索的会话记忆。',
-    hero='''    <figure class="hero-diagram">
+      <p style="color:var(--muted);font-size:14px;">This closes the 4-part series. Every <code>file:line</code> reference comes from the current <code>hermes-agent</code> source and can be used as a coordinate to read along.</p>''',
+    'code': '''      <h2>Source walkthrough: what save_to_disk() actually does</h2>
+      <p>The article cites <code>save_to_disk()</code> (<code>tools/memory_tool.py:387</code>) as "writes MEMORY.md straight to disk" — but that glosses over the important part. The method itself is tiny; the safety lives in <code>_write_file</code>, which uses an <strong>atomic temp-file + rename</strong> so concurrent readers never see a half-written file:</p>
+      <pre class="src"><code>def save_to_disk(self, target: str):
+    """Persist entries to the appropriate file. Called after every mutation."""
+    get_memory_dir().mkdir(parents=True, exist_ok=True)
+    self._write_file(self._path_for(target), self._entries_for(target))
+
+@staticmethod
+def _write_file(path: Path, entries: List[str]):
+    """Atomic temp-file + rename: readers see old OR new, never empty."""
+    content = ENTRY_DELIMITER.join(entries) if entries else ""
+    atomic_write_text(path, content, tmp_prefix=".mem_")</code></pre>
+      <p>And the <code>add()</code> path (<code>:414</code>) that calls it shows the real discipline: re-read from disk <strong>under a lock</strong> before mutating, reject exact duplicates, and refuse to write if the file read as empty (a transient blip that would otherwise wipe every prior memory):</p>
+      <pre class="src"><code>def add(self, target, content):
+    with self._file_lock(self._path_for(target)):
+        if self._reload_target(target, skip_drift=True) is _READ_FAILED:
+            return _read_failed_error(self._path_for(target))
+        ...
+        if content in entries:               # reject exact duplicate
+            return self._success_response(target, "Entry already exists.")
+        if new_total > limit:                # char-limit guard
+            return self._consolidation_failure({...})
+        entries.append(content)
+        self._set_entries(target, entries)
+        self.save_to_disk(target)            # durable write</code></pre>
+      <p>So "save_to_disk" is not a one-liner — it is the durable end of a path that locks, reloads, de-dupes, bounds by characters, and atomically swaps the file. That is the part the article's earlier summary skipped.</p>''',
+  },
+  'zh': {
+    'title': '长期记忆：事实落盘，会话进 FTS5',
+    'desc': '两条记忆线：事实经 MemoryManager → Provider 落盘（最朴素的 MemoryStore 写 MEMORY.md），会话经 SessionDB + FTS5 支持跨会话检索。',
+    'eyebrow': '架构 &middot; 第 4 / 4 篇',
+    'h1': '长期记忆：事实落盘，会话进 FTS5',
+    'deck': '基于真实源码拆解 Hermes 的两条记忆线——写盘的事实记忆，与建全文索引、可跨会话检索的会话记忆。',
+    'hero': '''    <figure class="hero-diagram">
       <pre class="mermaid">
 flowchart LR
   F["Fact memory"] --> MM["MemoryManager → Provider"]
@@ -461,7 +591,7 @@ flowchart LR
       </pre>
       <figcaption>两条线：事实落盘；会话建全文索引以支持跨会话检索。</figcaption>
     </figure>''',
-    body='''      <p>这是第 4 / 4 篇（1 消息网关、2 WhatsApp、3 自我进化、4 长期记忆），基于 <code>hermes-agent</code> 的<strong>真实源码</strong>。记忆跑在两条独立的线上。</p>
+    'body': '''      <p>这是第 4 / 4 篇（1 消息网关、2 WhatsApp、3 自我进化、4 长期记忆），基于 <code>hermes-agent</code> 的<strong>真实源码</strong>。记忆跑在两条独立的线上。</p>
 
       <h2>事实记忆</h2>
       <p>事实经 <code>MemoryManager → MemoryProvider</code>——后台线程、串行、去噪。最朴素的实现 <code>MemoryStore</code>（<code>tools/memory_tool.py:159</code>）通过 <code>save_to_disk()</code>（<code>:387</code>）把 <code>MEMORY.md</code> 直接落盘。这就是耐久的"我对用户已知什么"的存储。</p>
@@ -493,19 +623,46 @@ flowchart LR
         <li><strong>FTS5 + CJK：</strong><code>messages_fts_cjk</code> 让 <code>session_search</code> 能跨会话检索，含中文。</li>
         <li><strong>修过并发：</strong>写入路径现在只重读一次、在同一快照上做 drift 检测与解析，堵住了被覆盖的竞态。</li>
       </ul>
-      <p style="color:var(--muted);font-size:14px;">本系列到此结束。文中所有 <code>file:line</code> 引用均来自 <code>hermes-agent</code> 当前源码，可作对照阅读的坐标。</p>'''),
+      <p style="color:var(--muted);font-size:14px;">本系列到此结束。文中所有 <code>file:line</code> 引用均来自 <code>hermes-agent</code> 当前源码，可作对照阅读的坐标。</p>''',
+    'code': '''      <h2>源码走读：save_to_disk() 到底做了什么</h2>
+      <p>文章把 <code>save_to_disk()</code>（<code>tools/memory_tool.py:387</code>）说成"把 MEMORY.md 直接落盘"——但这略过了要害。方法本身很小；安全性在 <code>_write_file</code>：它用<strong>原子临时文件 + rename</strong>，并发读取者永远不会看到一个写一半的文件：</p>
+      <pre class="src"><code>def save_to_disk(self, target: str):
+    """Persist entries to the appropriate file. Called after every mutation."""
+    get_memory_dir().mkdir(parents=True, exist_ok=True)
+    self._write_file(self._path_for(target), self._entries_for(target))
+
+@staticmethod
+def _write_file(path: Path, entries: List[str]):
+    """Atomic temp-file + rename: readers see old OR new, never empty."""
+    content = ENTRY_DELIMITER.join(entries) if entries else ""
+    atomic_write_text(path, content, tmp_prefix=".mem_")</code></pre>
+      <p>调用它的 <code>add()</code> 路径（<code>:414</code>）才露出真纪律：改动前<strong>在锁内重读磁盘</strong>、拒绝完全重复、若文件读成空（瞬时抖动，否则会清空所有历史记忆）则拒绝写：</p>
+      <pre class="src"><code>def add(self, target, content):
+    with self._file_lock(self._path_for(target)):
+        if self._reload_target(target, skip_drift=True) is _READ_FAILED:
+            return _read_failed_error(self._path_for(target))
+        ...
+        if content in entries:               # 拒绝完全重复
+            return self._success_response(target, "Entry already exists.")
+        if new_total > limit:                # 字符上限护栏
+            return self._consolidation_failure({...})
+        entries.append(content)
+        self._set_entries(target, entries)
+        self.save_to_disk(target)            # 耐久写入</code></pre>
+      <p>所以"save_to_disk"不是一行代码——它是一条耐久路径的末端：加锁、重读、去重、按字符封顶、原子换文件。正是文章前一段省略掉的部分。</p>''',
+  },
  },
 }
 
 out_dir = 'blogs'
 for slug, langs in CONTENT.items():
-    for lang in ('en','zh'):
+    for lang in ('en', 'zh'):
         c = langs[lang]
-        other = 'hermes-%s-zh.html' % slug if lang=='en' else 'hermes-%s.html' % slug
-        lang_switch = ('Prefer 中文? <a href="%s">Read this article in 中文 &rarr;</a>' % other) if lang=='en' \
+        other = 'hermes-%s-zh.html' % slug if lang == 'en' else 'hermes-%s.html' % slug
+        lang_switch = ('Prefer 中文? <a href="%s">Read this article in 中文 &rarr;</a>' % other) if lang == 'en' \
                       else ('Read in English? <a href="%s">Read this article in English &rarr;</a>' % other)
-        author = AUTHOR_EN if lang=='en' else AUTHOR_ZH
-        langattr = 'zh-CN' if lang=='zh' else 'en'
+        author = AUTHOR_EN if lang == 'en' else AUTHOR_ZH
+        langattr = 'zh-CN' if lang == 'zh' else 'en'
         html = """<!doctype html>
 <html lang="{langattr}">
 <head>
@@ -515,7 +672,7 @@ for slug, langs in CONTENT.items():
   <meta content="{desc}" name="description" />
   {fonts}
   {head}
-  <style>{style}{seriescss}</style>
+  <style>{style}{seriescss}{srccss}</style>
 </head>
 <body>
   <article class="wrap">
@@ -527,6 +684,7 @@ for slug, langs in CONTENT.items():
     {hero}
     <div data-od-id="body">
 {body}
+{code}
     </div>
     {author}
     {series}
@@ -536,10 +694,10 @@ for slug, langs in CONTENT.items():
 </body>
 </html>
 """.format(langattr=langattr, lang=lang, title=c['title'], desc=c['desc'], fonts=FONTS, head=HEAD,
-           style=STYLE, seriescss=SERIES_CSS, nav=NAV, eyebrow=c['eyebrow'], h1=c['h1'],
-           deck=c['deck'], byline=BYLINE, hero=c['hero'], body=c['body'], author=author,
-           series=series(slug, lang), langswitch=lang_switch, zoom=ZOOM)
-        fname = 'hermes-%s%s.html' % (slug, '' if lang=='en' else '-zh')
+           style=STYLE, seriescss=SERIES_CSS, srccss=SRC_CSS, nav=NAV, eyebrow=c['eyebrow'], h1=c['h1'],
+           deck=c['deck'], byline=BYLINE, hero=c['hero'], body=c['body'], code=c.get('code', ''),
+           author=author, series=series(slug, lang), langswitch=lang_switch, zoom=ZOOM)
+        fname = 'hermes-%s%s.html' % (slug, '' if lang == 'en' else '-zh')
         open(os.path.join(out_dir, fname), 'w', encoding='utf-8').write(html)
         print('wrote', fname, len(html), 'bytes')
 

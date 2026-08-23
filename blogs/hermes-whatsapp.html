@@ -204,6 +204,11 @@
     .series a { color: var(--muted); text-decoration: none; }
     .series a:hover { color: var(--accent); }
     .series a.cur { color: var(--accent); font-weight: 600; }
+
+    pre.src { background: #0e1117; border: 1px solid var(--border); border-radius: 10px;
+      padding: 18px 20px; overflow-x: auto; margin: 22px 0; }
+    pre.src code { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 13px; line-height: 1.7; color: #d7dde8; white-space: pre; }
 </style>
 </head>
 <body>
@@ -216,7 +221,7 @@
       <a href="../index.html#skills">Skills</a>
     </nav>
     <div class="eyebrow" data-od-id="headline">Architecture &middot; Part 2 of 4</div>
-    <h1 data-od-id="headline">WhatsApp Integration: Cloud API, Webhooks, Failure Isolation</h1>
+    <h1 data-od-id="headline">WhatsApp Integration: Cloud API, Webhooks, and Failure Isolation</h1>
     <p class="deck" data-od-id="headline">A source-grounded walk through Hermes's WhatsApp path — and the retry-, failure-, and mention-handling details that make it safe in a busy group chat.</p>
         <div class="byline">
       <div class="avatar">DL</div>
@@ -270,6 +275,20 @@ flowchart TD
         <li><strong>Failure containment:</strong> a failed <code>send()</code> logs and moves on — one bad message never kills the loop.</li>
         <li><strong>Mention gating:</strong> only @-mentions get a reply in groups, keeping it a helper, not a spammer.</li>
       </ul>
+      <h2>Source walkthrough: what connect() actually sets up</h2>
+      <p>The article names <code>WhatsAppCloudAdapter.connect()</code> (<code>gateway/platforms/whatsapp_cloud.py:435</code>) as the wiring point. For real, it first <strong>refuses to start</strong> if deps or config are missing, then builds the two transports — an inbound webhook server and an outbound <code>httpx</code> client:</p>
+      <pre class="src"><code>async def connect(self, *, is_reconnect: bool = False) -> bool:
+    if not check_whatsapp_cloud_requirements():
+        self._set_fatal_error("whatsapp_cloud_deps_missing", ...)
+        return False
+    if not self._phone_number_id or not self._access_token:
+        self._set_fatal_error("whatsapp_cloud_unconfigured", ...)
+        return False
+    # Outbound HTTP client with tight keepalive.
+    self._http_client = httpx.AsyncClient(
+        timeout=30.0, limits=platform_httpx_limits())
+    # Inbound webhook server next ...</code></pre>
+      <p>Note the two <strong>fail-closed</strong> guards up front: a missing dependency or an unconfigured phone number id / token stops the adapter before it can half-start. That discipline is what keeps a misconfigured bot from silently eating webhooks.</p>
     </div>
         <div class="author">
       <div class="avatar">DL</div>

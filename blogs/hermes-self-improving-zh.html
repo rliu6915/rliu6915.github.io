@@ -204,6 +204,11 @@
     .series a { color: var(--muted); text-decoration: none; }
     .series a:hover { color: var(--accent); }
     .series a.cur { color: var(--accent); font-weight: 600; }
+
+    pre.src { background: #0e1117; border: 1px solid var(--border); border-radius: 10px;
+      padding: 18px 20px; overflow-x: auto; margin: 22px 0; }
+    pre.src code { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 13px; line-height: 1.7; color: #d7dde8; white-space: pre; }
 </style>
 </head>
 <body>
@@ -269,6 +274,22 @@ flowchart TD
         <li><strong>默认零成本：</strong>只有真正的语义合并才用 LLM。</li>
         <li><strong>设计即安全：</strong>dry-run 预演 + pinned 不动，策展不会毁掉手写内容。</li>
       </ul>
+      <h2>源码走读：run_curator_review 做什么</h2>
+      <p>文章称 <code>run_curator_review</code>（<code>agent/curator.py:1511</code>）是纯函数状态机。真实签名露出它的旋钮：同步/守护进程选择、dry-run 只报告不改动、<code>consolidate</code> 开关门控 LLM 合并：</p>
+      <pre class="src"><code>def run_curator_review(
+    on_summary=None, synchronous=False,
+    dry_run=False, consolidate=None) -> Dict[str, Any]:
+    """Execute a single curator review pass.
+      1. Apply automatic state transitions (pure, no LLM).
+      2. If consolidation enabled AND agent-created skills exist,
+         spawn a forked AIAgent for the LLM review prompt.
+      3. Update .curator_state with last_run_at + summary.
+      4. Invoke on_summary with a user-visible description.
+    """
+    if consolidate is None:
+        consolidate = get_consolidate()   # 默认 OFF
+    ...</code></pre>
+      <p>第 2 步的注释是关键：<strong>"consolidate 默认 OFF"</strong> 意味着普通运行完全跳过 fork 出来的 LLM 评审——只跑确定性的闲置 prune。这正解释了为什么默认零 token。</p>
     </div>
         <div class="author">
       <div class="avatar">DL</div>

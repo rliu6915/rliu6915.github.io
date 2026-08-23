@@ -204,6 +204,11 @@
     .series a { color: var(--muted); text-decoration: none; }
     .series a:hover { color: var(--accent); }
     .series a.cur { color: var(--accent); font-weight: 600; }
+
+    pre.src { background: #0e1117; border: 1px solid var(--border); border-radius: 10px;
+      padding: 18px 20px; overflow-x: auto; margin: 22px 0; }
+    pre.src code { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 13px; line-height: 1.7; color: #d7dde8; white-space: pre; }
 </style>
 </head>
 <body>
@@ -270,6 +275,20 @@ flowchart TD
         <li><strong>失败隔离：</strong><code>send()</code> 失败只记日志不抛出——一条坏消息永不拖垮循环。</li>
         <li><strong>@ 门控：</strong>群里只有被 @ 才回，保持帮手定位，不做喷子。</li>
       </ul>
+      <h2>源码走读：connect() 到底搭了什么</h2>
+      <p>文章把 <code>WhatsAppCloudAdapter.connect()</code>（<code>gateway/platforms/whatsapp_cloud.py:435</code>）称作接线点。真实情况是：它先<strong>拒绝启动</strong>（缺依赖或配置缺失就返回），再建两条传输——入站 webhook 服务、出站 <code>httpx</code> 客户端：</p>
+      <pre class="src"><code>async def connect(self, *, is_reconnect: bool = False) -> bool:
+    if not check_whatsapp_cloud_requirements():
+        self._set_fatal_error("whatsapp_cloud_deps_missing", ...)
+        return False
+    if not self._phone_number_id or not self._access_token:
+        self._set_fatal_error("whatsapp_cloud_unconfigured", ...)
+        return False
+    # Outbound HTTP client with tight keepalive.
+    self._http_client = httpx.AsyncClient(
+        timeout=30.0, limits=platform_httpx_limits())
+    # Inbound webhook server next ...</code></pre>
+      <p>注意开头的两道<strong>失败即停</strong>护栏：缺依赖、或 phone number id / token 没配，适配器在半启动前就停下。正是这份纪律，让一个配错的 bot 不会默默吞掉 webhook。</p>
     </div>
         <div class="author">
       <div class="avatar">DL</div>

@@ -204,6 +204,11 @@
     .series a { color: var(--muted); text-decoration: none; }
     .series a:hover { color: var(--accent); }
     .series a.cur { color: var(--accent); font-weight: 600; }
+
+    pre.src { background: #0e1117; border: 1px solid var(--border); border-radius: 10px;
+      padding: 18px 20px; overflow-x: auto; margin: 22px 0; }
+    pre.src code { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 13px; line-height: 1.7; color: #d7dde8; white-space: pre; }
 </style>
 </head>
 <body>
@@ -267,6 +272,32 @@ flowchart LR
         <li><strong>修过并发：</strong>写入路径现在只重读一次、在同一快照上做 drift 检测与解析，堵住了被覆盖的竞态。</li>
       </ul>
       <p style="color:var(--muted);font-size:14px;">本系列到此结束。文中所有 <code>file:line</code> 引用均来自 <code>hermes-agent</code> 当前源码，可作对照阅读的坐标。</p>
+      <h2>源码走读：save_to_disk() 到底做了什么</h2>
+      <p>文章把 <code>save_to_disk()</code>（<code>tools/memory_tool.py:387</code>）说成"把 MEMORY.md 直接落盘"——但这略过了要害。方法本身很小；安全性在 <code>_write_file</code>：它用<strong>原子临时文件 + rename</strong>，并发读取者永远不会看到一个写一半的文件：</p>
+      <pre class="src"><code>def save_to_disk(self, target: str):
+    """Persist entries to the appropriate file. Called after every mutation."""
+    get_memory_dir().mkdir(parents=True, exist_ok=True)
+    self._write_file(self._path_for(target), self._entries_for(target))
+
+@staticmethod
+def _write_file(path: Path, entries: List[str]):
+    """Atomic temp-file + rename: readers see old OR new, never empty."""
+    content = ENTRY_DELIMITER.join(entries) if entries else ""
+    atomic_write_text(path, content, tmp_prefix=".mem_")</code></pre>
+      <p>调用它的 <code>add()</code> 路径（<code>:414</code>）才露出真纪律：改动前<strong>在锁内重读磁盘</strong>、拒绝完全重复、若文件读成空（瞬时抖动，否则会清空所有历史记忆）则拒绝写：</p>
+      <pre class="src"><code>def add(self, target, content):
+    with self._file_lock(self._path_for(target)):
+        if self._reload_target(target, skip_drift=True) is _READ_FAILED:
+            return _read_failed_error(self._path_for(target))
+        ...
+        if content in entries:               # 拒绝完全重复
+            return self._success_response(target, "Entry already exists.")
+        if new_total > limit:                # 字符上限护栏
+            return self._consolidation_failure({...})
+        entries.append(content)
+        self._set_entries(target, entries)
+        self.save_to_disk(target)            # 耐久写入</code></pre>
+      <p>所以"save_to_disk"不是一行代码——它是一条耐久路径的末端：加锁、重读、去重、按字符封顶、原子换文件。正是文章前一段省略掉的部分。</p>
     </div>
         <div class="author">
       <div class="avatar">DL</div>

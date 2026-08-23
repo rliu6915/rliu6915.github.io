@@ -204,6 +204,11 @@
     .series a { color: var(--muted); text-decoration: none; }
     .series a:hover { color: var(--accent); }
     .series a.cur { color: var(--accent); font-weight: 600; }
+
+    pre.src { background: #0e1117; border: 1px solid var(--border); border-radius: 10px;
+      padding: 18px 20px; overflow-x: auto; margin: 22px 0; }
+    pre.src code { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 13px; line-height: 1.7; color: #d7dde8; white-space: pre; }
 </style>
 </head>
 <body>
@@ -269,6 +274,22 @@ flowchart TD
         <li><strong>Zero cost by default:</strong> LLM is used only for genuine semantic merges.</li>
         <li><strong>Safe by design:</strong> dry-run preview + pinned-skills-untouched keep curation from destroying hand-written content.</li>
       </ul>
+      <h2>Source walkthrough: what run_curator_review does</h2>
+      <p>The article calls <code>run_curator_review</code> (<code>agent/curator.py:1511</code>) a pure-function state machine. For real, the function signature shows its knobs: a synchronous/daemon choice, a dry-run that reports without mutating, and a <code>consolidate</code> flag that gates the LLM umbrella-building pass:</p>
+      <pre class="src"><code>def run_curator_review(
+    on_summary=None, synchronous=False,
+    dry_run=False, consolidate=None) -> Dict[str, Any]:
+    """Execute a single curator review pass.
+      1. Apply automatic state transitions (pure, no LLM).
+      2. If consolidation enabled AND agent-created skills exist,
+         spawn a forked AIAgent for the LLM review prompt.
+      3. Update .curator_state with last_run_at + summary.
+      4. Invoke on_summary with a user-visible description.
+    """
+    if consolidate is None:
+        consolidate = get_consolidate()   # OFF by default
+    ...</code></pre>
+      <p>The comment on step 2 is the key: <strong>"consolidate OFF by default"</strong> means the forked LLM review is skipped entirely on a normal run — only the deterministic inactivity prune runs. That is exactly why the default costs zero tokens.</p>
     </div>
         <div class="author">
       <div class="avatar">DL</div>
