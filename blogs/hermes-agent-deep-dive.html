@@ -67,17 +67,17 @@
         <p>先建立心智模型。Hermes 的核心是一个 <code>AIAgent</code> 类（<code>run_agent.py</code>），它只负责“一次对话循环”。所有“从哪个聊天软件来、回哪个聊天软件去”的复杂度，都被推到 <code>GatewayRunner</code>（<code>gateway/run.py</code>，约 31k 行）和各平台 <code>BasePlatformAdapter</code> 子类里。</p>
         <p>关键设计原则（来自 <code>AGENTS.md</code>）：<strong>Per-conversation prompt caching is sacred</strong>——每轮对话复用缓存前缀，任何中途改动 system prompt 或 tool schema 都会让缓存失效、成本翻倍。所以 Gateway 必须在“复用同一份 agent 实例”和“多会话隔离”之间精打细算。</p>
 
-        <div class="mermaid">
+        <pre class="mermaid">
 flowchart LR
-  U[User] -->|message| PA[Platform Adapter<br/>WhatsApp / Telegram / ...]
-  PA -->|MessageEvent| GR[GatewayRunner<br/>gateway/run.py]
-  GR -->|session_key| AG[AIAgent<br/>run_agent.py]
-  AG -->|final_response| GR
-  GR -->|send()| PA
-  PA -->|message| U
-  GR -.->|sync_turn| MEM[MemoryManager<br/>+ Providers]
-  GR -.->|run_curator_review| CUR[Curator]
-        </div>
+  U["User"] -->|"message"| PA["Platform Adapter (WhatsApp / Telegram / ...)"]
+  PA -->|"MessageEvent"| GR["GatewayRunner (gateway/run.py)"]
+  GR -->|"session_key"| AG["AIAgent (run_agent.py)"]
+  AG -->|"final_response"| GR
+  GR -->|"send()"| PA
+  PA -->|"message"| U
+  GR -.->|"sync_turn"| MEM["MemoryManager + Providers"]
+  GR -.->|"run_curator_review"| CUR["Curator"]
+        </pre>
 
         <hr style="border-color:rgba(255,255,255,.12)">
 
@@ -92,25 +92,24 @@ flowchart LR
         </ul>
 
         <h3>1.2 流程图 Flow Chart</h3>
-        <div class="mermaid">
+        <pre class="mermaid">
 sequenceDiagram
   participant U as User
   participant A as Platform Adapter
   participant G as GatewayRunner._handle_message
   participant T as TurnRunner.run_sync
   participant Ag as AIAgent
-
-  U->>A: 原始消息 (webhook / socket)
+  U->>A: raw message via webhook or socket
   A->>G: handle_message(MessageEvent)
-  G->>G: build_session_key() 路由会话
-  G->>G: 授权 / 命令检查 (/new,/stop)
-  G->>G: 活跃会话锁 (可中断)
-  G->>T: 派生后台任务
-  T->>Ag: 解析 runtime, 合并 ephemeral prompt
-  Ag-->>T: 工具循环 + final_response
-  T->>A: send() 流式/分块回包
-  A->>U: 消息
-        </div>
+  G->>G: build_session_key routing
+  G->>G: auth and command check
+  G->>G: active session lock (interruptible)
+  G->>T: spawn background task
+  T->>Ag: resolve runtime and merge ephemeral prompt
+  Ag-->>T: tool loop plus final_response
+  T->>A: send() streamed or chunked
+  A->>U: message
+        </pre>
 
         <h3>1.3 核心方法分析 Key Method Analysis</h3>
 
@@ -138,17 +137,17 @@ sequenceDiagram
         <p>共享行为抽在 <code>WhatsAppBehaviorMixin</code>（<code>whatsapp_common.py:64</code>）：mention 检测、allowlist 鉴权、DM 放行、群聊策略、文本清洗、分块上限。Cloud 适配器再继承 <code>BasePlatformAdapter</code> + 这个 mixin。</p>
 
         <h3>2.2 流程图 Flow Chart</h3>
-        <div class="mermaid">
+        <pre class="mermaid">
 flowchart TD
-  M[Meta Webhook POST] -->|_handle_webhook| V[_verify_signature<br/>HMAC-SHA256]
-  V -->|ok| D[_dispatch_payload]
-  D -->|遍历 entry/changes/messages| AW[_dedup_wamid<br/>去重防重试]
-  AW --> B[_build_message_event_from_cloud]
-  B -->|_should_process_message<br/>mention/allowlist/DM策略| H[handle_message]
-  H --> GR[GatewayRunner]
-  GR -->|send / send_image / send_voice| G[(Meta Graph API<br/>/v21.0/PHONE_ID/messages)]
-  G --> U[User on WhatsApp]
-        </div>
+  M["Meta Webhook POST"] -->|"_handle_webhook"| V["_verify_signature HMAC-SHA256"]
+  V -->|"ok"| D["_dispatch_payload"]
+  D -->|"iterate entry/changes/messages"| AW["_dedup_wamid"]
+  AW --> B["_build_message_event_from_cloud"]
+  B -->|"_should_process_message"| H["handle_message"]
+  H --> GR["GatewayRunner"]
+  GR -->|"send / send_image / send_voice"| G["Meta Graph API messages"]
+  G --> U["User on WhatsApp"]
+        </pre>
 
         <h3>2.3 核心方法分析 Key Method Analysis</h3>
 
@@ -182,16 +181,16 @@ flowchart TD
         </ul>
 
         <h3>3.2 流程图 Flow Chart</h3>
-        <div class="mermaid">
+        <pre class="mermaid">
 flowchart TD
-  T[Timer / Inactivity] --> R[run_curator_review]
-  R --> S[apply_automatic_transitions<br/>纯函数, 无 LLM]
-  S -->|标记 stale / archive| ST[(.curator_state)]
-  R -->|consolidate ON?| L[spawn forked AIAgent<br/>跑 LLM 合并 prompt]
-  L -->|产出 REPORT / 合并建议| SK[(~/.hermes/skills)]
-  R -->|dry_run| REP[REPORT.md<br/>只报告不动手]
-  SK --> U[Agent 后续检索加载]
-        </div>
+  T["Timer / Inactivity"] --> R["run_curator_review"]
+  R --> S["apply_automatic_transitions (pure, no LLM)"]
+  S -->|"stale / archive"| ST[".curator_state"]
+  R -->|"consolidate ON"| L["spawn forked AIAgent (LLM merge)"]
+  L -->|"REPORT / merge"| SK["~/.hermes/skills"]
+  R -->|"dry_run"| REP["REPORT.md (report only)"]
+  SK --> U["Agent later loads"]
+        </pre>
 
         <h3>3.3 核心方法分析 Key Method Analysis</h3>
 
@@ -222,18 +221,18 @@ flowchart TD
         </ul>
 
         <h3>4.2 流程图 Flow Chart</h3>
-        <div class="mermaid">
+        <pre class="mermaid">
 flowchart TD
-  U[User message] --> Ag[AIAgent.run_conversation]
-  Ag --> MM[MemoryManager]
-  MM -->|prefetch_all 注入系统提示| Ag
-  Ag -->|turn 结束| MM
-  MM -->|sync_all 后台线程| MP[MemoryProvider.sync_turn]
-  MP -->|落库| BE[(Backend: mem0 / honcho / ...)]
-  AG[memory_tool: add/replace/remove] --> MS[MemoryStore]
-  MS -->|save_to_disk| F[(MEMORY.md / USER.md)]
-  Ag -->|每轮消息| SD[SessionDB + FTS5]
-        </div>
+  U["User message"] --> Ag["AIAgent.run_conversation"]
+  Ag --> MM["MemoryManager"]
+  MM -->|"prefetch_all into system prompt"| Ag
+  Ag -->|"turn ends"| MM
+  MM -->|"sync_all (background thread)"| MP["MemoryProvider.sync_turn"]
+  MP -->|"persist"| BE["Backend: mem0 / honcho / ..."]
+  AG["memory_tool add/replace/remove"] --> MS["MemoryStore"]
+  MS -->|"save_to_disk"| F["MEMORY.md / USER.md"]
+  Ag -->|"each turn"| SD["SessionDB + FTS5"]
+        </pre>
 
         <h3>4.3 核心方法分析 Key Method Analysis</h3>
 
