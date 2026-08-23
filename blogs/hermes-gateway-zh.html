@@ -3,15 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Hermes Agent 架构深度解析 — Daniel Liu</title>
-  <meta content="从源码与文档出发，拆解 Hermes Agent 的 Message Gateway、WhatsApp 接入、Self-Improving 与长期记忆。" name="description" />
-
+  <title>消息网关：把平台与 Agent 彻底解耦 — Daniel Liu</title>
+  <meta content="Hermes 如何把 20+ 聊天平台归一化成一条事件流——以及为什么 Gateway 承担协议复杂度，而 Agent 只跑一次对话循环。" name="description" />
   <link href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,600,600i,700,700i|Raleway:300,300i,400,400i,500,500i,600,600i,700,700i|Poppins:300,300i,400,400i,500,500i,600,600i,700,700i" rel="stylesheet">
-
-  <!-- Mermaid for architecture diagrams -->
   <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
   <script>document.addEventListener("DOMContentLoaded", function(){ if(window.mermaid){ mermaid.initialize({startOnLoad:true, theme:"dark", themeVariables:{fontSize:"15px"}}); } });</script>
-
   <style>
     :root {
       --bg: #010e1b;
@@ -184,35 +180,49 @@
       border-bottom: 1px solid rgba(18,214,64,.4);
     }
 
+    /* Click-to-zoom for diagrams */
+    .mermaid { cursor: zoom-in; }
+    .zoom-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.85);
+      display: none; align-items: center; justify-content: center;
+      z-index: 9999; padding: 40px; cursor: zoom-out;
+    }
+    .zoom-overlay.open { display: flex; }
+    .zoom-overlay svg {
+      max-width: 95vw; max-height: 90vh; width: auto; height: auto;
+      background: var(--surface); border-radius: 12px; padding: 24px;
+    }
+
     @media (max-width: 640px) {
       .related .grid { grid-template-columns: 1fr; }
       nav.top { flex-wrap: wrap; gap: 12px 18px; }
     }
-  </style>
+  
+    .series { margin-top: 56px; padding-top: 22px; border-top: 1px solid var(--border);
+      font-family: Raleway, -apple-system, system-ui, sans-serif; font-size: 14px;
+      color: var(--muted); text-align: center; line-height: 2; }
+    .series a { color: var(--muted); text-decoration: none; }
+    .series a:hover { color: var(--accent); }
+    .series a.cur { color: var(--accent); font-weight: 600; }
+</style>
 </head>
 <body>
   <article class="wrap">
-
-    <!-- Masthead -->
-    <nav class="top">
+        <nav class="top">
       <span class="wordmark">Daniel Liu</span>
       <a href="../index.html">Home</a>
       <a href="index.html" class="active">Blog</a>
       <a href="../index.html#projects">Projects</a>
       <a href="../index.html#skills">Skills</a>
     </nav>
-
-    <!-- Article header -->
-    <div class="eyebrow" data-od-id="headline">架构 / Architecture</div>
-    <h1 data-od-id="headline">Hermes Agent 架构深度解析</h1>
-    <p class="deck" data-od-id="headline">从真实源码与文档出发，拆解一个个人 AI Agent 如何把"多平台消息"和"一次对话循环"彻底解耦——以及它怎么自己进化、记住你。</p>
-    <div class="byline">
+    <div class="eyebrow" data-od-id="headline">架构 &middot; 第 1 / 4 篇</div>
+    <h1 data-od-id="headline">消息网关：把平台与 Agent 彻底解耦</h1>
+    <p class="deck" data-od-id="headline">基于真实源码：每个平台适配器共享的入口契约，以及 GatewayRunner 内部把"协议复杂度"挡在 agent 核心之外的两层结构。</p>
+        <div class="byline">
       <div class="avatar">DL</div>
-      <span>By Daniel Liu · August 23, 2026 · 12 min read</span>
+      <span>By Daniel Liu &middot; August 23, 2026 &middot; 8 min read</span>
     </div>
-
-    <!-- Hero diagram -->
-    <figure class="hero-diagram">
+        <figure class="hero-diagram">
       <pre class="mermaid">
 flowchart LR
   U["User"] --> PA["Platform Adapters (WhatsApp, Telegram, ...)"]
@@ -222,99 +232,57 @@ flowchart LR
   GR --> PA
   PA --> U
       </pre>
-      <figcaption>Hermes 的核心分层：Agent 只管一次对话，复杂度全在 Gateway 与各平台适配器。</figcaption>
+      <figcaption>核心分层：Agent 只管一次对话，所有平台复杂度都在 Gateway 与各适配器里。</figcaption>
     </figure>
-
-    <!-- Body -->
     <div data-od-id="body">
+      <p>这是 Hermes Agent 架构系列的第 1 / 4 篇，基于<strong>真实源码</strong>（仓库 <code>hermes-agent</code>）。四篇分别是：(1) 消息网关、(2) WhatsApp、(3) 自我进化、(4) 长期记忆。开篇先讲承载其余一切的这块：任意约 20 个平台的消息，如何变成 agent 能推理的一条归一化事件。</p>
 
-      <p>这是一篇基于 <strong>Hermes Agent 真实源码与 docs</strong> 的技术解析（仓库 <code>hermes-agent</code>），不是泛泛而谈的产品介绍。我会拆四个能力：<strong>Message Gateway</strong>（多平台消息网关）、<strong>WhatsApp</strong> 接入适配、<strong>Self-Improving</strong>（技能策展 / 自我进化）、<strong>Long-Term Memory</strong>（长期记忆如何落地）。每个能力都给：架构、核心方法分析、以及我在源码里扒出来的真实坐标（<code>file:line</code>）。</p>
+      <h2>入口契约</h2>
+      <p>每个平台适配器——Telegram、Discord、Slack、WhatsApp、Signal 等——都继承 <code>BasePlatformAdapter.handle_message(event)</code>（<code>gateway/platforms/base.py:6045</code>）。适配器的唯一职责是把平台原始消息<strong>归一化</strong>成 <code>MessageEvent</code>，交给 <code>GatewayRunner._handle_message</code>（<code>gateway/run.py:16462</code>）。这条归一化就是接缝：agent 从来看不到"Telegram 更新 vs WhatsApp webhook"的区别，它只看到 <code>MessageEvent</code>。</p>
 
-      <h2>0. 全景：Agent Core 与 Gateway 的分层</h2>
-      <p>先建立心智模型。Hermes 的核心是一个 <code>AIAgent</code> 类（<code>run_agent.py</code>），它<strong>只负责"一次对话循环"</strong>。所有"从哪个聊天软件来、回哪个聊天软件去"的复杂度，都被推到 <code>GatewayRunner</code>（<code>gateway/run.py</code>，约 31k 行）和各平台 <code>BasePlatformAdapter</code> 子类里。</p>
-      <p>关键设计原则（来自 <code>AGENTS.md</code>）：<strong>Per-conversation prompt caching is sacred</strong>——每轮对话复用缓存前缀，任何中途改动 system prompt 或 tool schema 都会让缓存失效、成本翻倍。所以 Gateway 必须在"复用同一份 agent 实例"和"多会话隔离"之间精打细算。</p>
-
-      <figure class="diagram">
-        <pre class="mermaid">
-flowchart LR
-  U["User"] -->|"message"| PA["Platform Adapter (WhatsApp / Telegram / ...)"]
-  PA -->|"MessageEvent"| GR["GatewayRunner (gateway/run.py)"]
-  GR -->|"session_key"| AG["AIAgent (run_agent.py)"]
-  AG -->|"final_response"| GR
-  GR -->|"send()"| PA
-  PA -->|"message"| U
-  GR -.->|"sync_turn"| MEM["MemoryManager + Providers"]
-  GR -.->|"run_curator_review"| CUR["Curator"]
-        </pre>
-        <figcaption>图 1 — 同样是这个分层，但带上了真实源码坐标。适配器归一化事件；GatewayRunner 做会话/授权/命令；TurnRunner（gateway/run.py:5348）跑闭环。</figcaption>
-      </figure>
-
-      <h2>1. Message Gateway（多平台消息网关）</h2>
-      <p>入口契约是 <code>BasePlatformAdapter.handle_message(event)</code>（<code>gateway/platforms/base.py:6045</code>）。每个平台适配器（Telegram、Discord、Slack、WhatsApp、Signal…）都继承它。适配器把平台原始消息归一化成 <code>MessageEvent</code>，交给 <code>GatewayRunner</code> 的 <code>_handle_message</code>（<code>gateway/run.py:16462</code>）。</p>
-      <p>GatewayRunner 内部再分两层：<strong>会话路由层</strong>（按 <code>session_key</code> 找/建会话、活跃会话锁、工具审批流）和 <strong>TurnRunner</strong>（<code>gateway/run.py:5348</code>，真正跑一轮 agent 循环、流式输出、把 tool 结果喂回去）。这套切分让"平台协议复杂度"和"agent 核心逻辑"互不污染。</p>
+      <h2>GatewayRunner 内部的两层</h2>
+      <p>内部，GatewayRunner 分成<strong>会话路由层</strong>（按 <code>session_key</code> 找/建会话、取活跃会话锁、跑工具审批流）和 <strong>TurnRunner</strong>（<code>gateway/run.py:5348</code>，真正跑一轮 agent 循环、流式输出、把 tool 结果喂回去）。这套切分让"平台协议复杂度"和"agent 核心逻辑"互不污染。</p>
 
       <blockquote class="inline">设计直觉：Gateway 不是 agent 的"前端"，而是 agent 的"邮局"——它只负责把信（MessageEvent）正确投递、把回信（final_response）正确发出，绝不替 agent 思考。</blockquote>
 
-      <h2>2. WhatsApp 接入</h2>
-      <p>WhatsApp 走 Meta 的 <strong>Cloud API</strong>：webhook 收消息 → Graph API 发消息。<code>WhatsAppCloudAdapter.connect()</code>（<code>gateway/platforms/whatsapp_cloud.py:435</code>）注册 webhook 校验与消息回调。三个工程细节值得记：</p>
-      <ul>
-        <li><strong>抗重试</strong>：Meta 的 webhook 会重复投递，靠 <code>_dedup_wamid</code> 去重，避免一条消息触发两次回复。</li>
-        <li><strong>抗错误扩散</strong>：dispatch 失败时只 <code>log</code> 不抛——一条消息发不出去，不该炸掉整个 webhook 处理循环。</li>
-        <li><strong>谁该被回复</strong>：mixin 里的 mention / allowlist 策略决定"群聊里只有 @ 我才回"，避免成骚扰机器人。</li>
-      </ul>
-
-      <blockquote class="pull">"Self-Improving 不是让 agent 改自己的代码，而是把经验固化为 skill。"</blockquote>
-
-      <h2>3. Self-Improving（自我进化）</h2>
-      <p>这里最容易误读。Hermes 的"自我进化"不是让模型在线改源码，而是把<strong>可复用的经验固化为 skill</strong>（<code>SKILL.md</code> 形式的流程知识），由后台 <strong>Curator</strong> 做管家。</p>
-      <p><code>agent/curator.py</code> 的 <code>run_curator_review</code>（<code>:1511</code>）是一个<strong>纯函数状态机</strong>：扫描现有 skill、判断是否需要合并/归档/更新，可选调用 LLM 做"语义合并"。关键工程取舍：</p>
-      <ol>
-        <li><strong>默认零 LLM 成本</strong>——状态机本身不调模型，只有真正需要语义判断时才花 token。</li>
-        <li><strong>dry-run 可预演</strong>——先打印"将要做什么"，确认无误再落地。</li>
-        <li><strong>pinned skill 永不动</strong>——被显式钉住的 skill 跳过所有自动化，防止策展把人工精心写的内容冲掉。</li>
-      </ol>
-
-      <h2>4. Long-Term Memory（长期记忆）</h2>
-      <p>记忆分两条线。一条是<strong>事实记忆</strong>：<code>MemoryManager → MemoryProvider</code>（后台线程、串行、去噪），最朴素的一版 <code>MemoryStore</code>（<code>tools/memory_tool.py:159</code>）直接落 <code>MEMORY.md</code> 到磁盘（<code>save_to_disk()</code> @ <code>:387</code>）。另一条是<strong>会话记忆</strong>：<code>hermes_state.py</code> 用 FTS5 建全文索引（含 CJK tokenizer <code>messages_fts_cjk</code>，<code>:2685</code>），这就是 <code>session_search</code> 能跨会话检索的底座。</p>
-
       <figure class="diagram">
         <pre class="mermaid">
-flowchart LR
-  IN["Incoming memory op"] --> ADD{"add?"}
-  ADD -->|yes| AP["append (skip drift guard)"]
-  ADD -->|no| RE["replace / remove / apply_batch"]
-  RE --> DR["_reload_target(): read disk ONCE"]
-  DR --> DT["drift check + parse on SAME snapshot"]
-  DT -->|"drifted"| AB["abort change"]
-  DT -->|"clean"| W["write file"]
-  AP --> W
+flowchart TD
+  W["Webhook / inbox"] --> A["Adapter.handle_message()"]
+  A --> E["MessageEvent"]
+  E --> H["GatewayRunner._handle_message()"]
+  H --> S{"session_key resolved?"}
+  S -->|yes| L["acquire active-session lock"]
+  S -->|no| C["create session"]
+  C --> L
+  L --> T["TurnRunner (run.py:5348)"]
+  T --> AG["AIAgent loop"]
+  AG --> F["final_response"]
+  F --> H
+  H --> O["send() back to adapter"]
         </pre>
-        <figcaption>图 2 — 记忆写入的竞态防护。一次读盘、一份快照同时做 drift 检测 + 解析，避免两次读之间外部写入被静默覆盖。</figcaption>
+        <figcaption>图 1 — 一条入站消息的路径：归一化、按会话路由、跑一轮、流式回传。适配器与 Gateway 包揽了 AIAgent 方框之外的一切。</figcaption>
       </figure>
 
-      <h2>5. 小结 Takeaways</h2>
+      <h2>为什么这个分层重要</h2>
+      <p>关键约束（来自 <code>AGENTS.md</code>）是 <strong>Per-conversation prompt caching is sacred</strong>：每轮对话复用缓存前缀，任何中途改动 system prompt 或 tool schema 都会让缓存失效、成本翻倍。因为 Gateway 管会话/作用域、agent 保持"纯一次对话循环"，同一个 agent 实例得以按会话复用而不改其上下文——缓存在 20+ 平台间都保得住。</p>
+
+      <h2>小结</h2>
       <ul>
-        <li><strong>Gateway 的本质</strong>：把"平台协议复杂度"和"agent 核心循环"彻底解耦，整套设计围绕"prompt caching 不可破坏"这条铁律。</li>
-        <li><strong>WhatsApp</strong>：Cloud API + webhook + Graph API；抗重试靠 <code>_dedup_wamid</code>，抗错误扩散靠"dispatch 失败只 log 不抛"。</li>
-        <li><strong>Self-Improving</strong>：经验→skill，Curator 用"纯函数状态机 + 可选 LLM 合并"做后台管家，默认零成本、可预演、pinned 不动。</li>
-        <li><strong>Long-Term Memory</strong>：事实走 <code>MemoryManager → Provider</code>，会话走 <code>SessionDB + FTS5</code>；最朴素的 <code>MemoryStore</code> 直接落盘并在 drift 检测上修过竞态。</li>
+        <li><strong>一个契约，多平台：</strong><code>BasePlatformAdapter.handle_message</code> 是唯一的接缝；适配器归一化，agent 对平台无感。</li>
+        <li><strong>内部两层：</strong>会话路由（解析/加锁/审批）与 TurnRunner（跑循环）——协议复杂度永不触及 agent 核心。</li>
+        <li><strong>分层是为了缓存：</strong>"纯一次对话循环"的 agent，才让 prompt caching 在 20+ 平台间不被破坏。</li>
       </ul>
-      <p style="color:var(--muted);font-size:14px;">文中所有 <code>file:line</code> 引用均来自 <code>hermes-agent</code> 仓库当前源码，可作为对照阅读的坐标。</p>
-
     </div>
-
-    <!-- Author footer -->
-    <div class="author">
+        <div class="author">
       <div class="avatar">DL</div>
       <div class="bio">
         <strong>Daniel Liu</strong>
         软件工程师，写 AI Agent、基础设施，以及把它们接进日常聊天软件的小工具。这个博客记录边做边学的东西。
       </div>
     </div>
-
-    <!-- Language switch -->
-    <p class="lang-switch">Read in English? <a href="hermes-agent-deep-dive.html">Read this article in English →</a></p>
-
+    <p class="series">本系列共 4 篇：<a href="hermes-gateway.html" class="cur">1 &middot; 网关</a> &middot; <a href="hermes-whatsapp.html">2 &middot; WhatsApp</a> &middot; <a href="hermes-self-improving.html">3 &middot; 自我进化</a> &middot; <a href="hermes-memory.html">4 &middot; 记忆</a></p>
+    <p class="lang-switch">Read in English? <a href="hermes-gateway.html">Read this article in English &rarr;</a></p>
   </article>
   <div class="zoom-overlay" id="zoomOverlay"></div>
   <script>
@@ -330,6 +298,5 @@ flowchart LR
     zoomOverlay.addEventListener('click', function(){ this.classList.remove('open'); this.innerHTML=''; });
     document.addEventListener('keydown', function(e){ if(e.key==='Escape'){ zoomOverlay.classList.remove('open'); zoomOverlay.innerHTML=''; } });
   </script>
-
 </body>
 </html>

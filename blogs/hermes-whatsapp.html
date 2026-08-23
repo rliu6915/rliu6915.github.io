@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WhatsApp Integration: Cloud API, Webhooks, and Failure Isolation — Daniel Liu</title>
+  <meta content="Walking the Meta Cloud API path: webhook ingestion, Graph API delivery, and the three engineering details that keep a group chat from becoming a spam bot." name="description" />
+  <link href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,600,600i,700,700i|Raleway:300,300i,400,400i,500,500i,600,600i,700,700i|Poppins:300,300i,400,400i,500,500i,600,600i,700,700i" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>document.addEventListener("DOMContentLoaded", function(){ if(window.mermaid){ mermaid.initialize({startOnLoad:true, theme:"dark", themeVariables:{fontSize:"15px"}}); } });</script>
+  <style>
+    :root {
+      --bg: #010e1b;
+      --surface: #09203a;
+      --fg: #e8eef5;
+      --muted: #9aa6b2;
+      --border: rgba(255,255,255,.12);
+      --accent: #12d640;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font: 19px/1.7 Georgia, 'Iowan Old Style', 'Songti SC', serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    .wrap { max-width: 700px; margin: 0 auto; padding: 40px 28px 96px; }
+
+    /* Masthead */
+    nav.top {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 13px; letter-spacing: .04em;
+      display: flex; align-items: center; gap: 22px;
+      color: var(--muted); margin-bottom: 64px;
+      border-bottom: 1px solid var(--border); padding-bottom: 18px;
+    }
+    nav.top .wordmark { color: var(--fg); font-weight: 700; font-size: 15px; letter-spacing: .02em; }
+    nav.top a { color: var(--muted); text-decoration: none; transition: color .2s; }
+    nav.top a:hover, nav.top a.active { color: var(--accent); }
+
+    /* Article header */
+    .eyebrow {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 12px; text-transform: uppercase; letter-spacing: .12em;
+      color: var(--accent); margin-bottom: 16px;
+    }
+    h1 {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: clamp(34px, 5.4vw, 52px); line-height: 1.08;
+      letter-spacing: -0.02em; margin: 0 0 18px; color: #fff;
+    }
+    .deck {
+      font-size: 21px; line-height: 1.5; color: var(--muted);
+      margin: 0 0 28px; font-style: italic;
+    }
+    .byline {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 13.5px; color: var(--muted);
+      display: flex; align-items: center; gap: 12px; margin: 0 0 44px;
+    }
+    .byline .avatar {
+      width: 34px; height: 34px; border-radius: 50%;
+      background: var(--accent); color: #010e1b;
+      display: grid; place-items: center; font-weight: 700; font-size: 13px;
+      font-family: Raleway, sans-serif;
+    }
+
+    /* Hero diagram */
+    .hero-diagram {
+      margin: 0 0 48px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 28px; overflow-x: auto;
+    }
+    .hero-diagram .mermaid { font-size: 15px; }
+    .hero-diagram figcaption {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 12.5px; color: var(--muted); margin-top: 14px; text-align: center;
+    }
+
+    /* Body */
+    p { margin: 26px 0; }
+    p:first-of-type::first-letter {
+      float: left; font-size: 66px; line-height: .82;
+      padding: 6px 12px 0 0; font-weight: 700; color: var(--accent);
+      font-family: Georgia, serif;
+    }
+    h2 {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 27px; letter-spacing: -0.01em;
+      margin: 60px 0 14px; line-height: 1.25; color: #fff;
+    }
+    h3 {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 19px; color: var(--accent); margin: 34px 0 8px;
+    }
+    a.inline { color: var(--accent); text-decoration: none; border-bottom: 1px solid rgba(18,214,64,.4); }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      background: var(--surface); border: 1px solid var(--border);
+      padding: 1px 5px; border-radius: 4px; font-size: .82em; color: #b8f5c8;
+    }
+    ul, ol { color: var(--fg); line-height: 1.8; margin: 20px 0; padding-left: 24px; }
+    li { margin-bottom: 8px; }
+
+    /* Pull quote */
+    blockquote.pull {
+      margin: 44px 0; padding: 4px 0 4px 30px;
+      font-size: 25px; line-height: 1.42; color: #fff;
+      border-left: 3px solid var(--accent); font-style: italic;
+      font-family: Georgia, 'Songti SC', serif;
+    }
+    /* Inline blockquote */
+    blockquote.inline {
+      margin: 36px 0; padding: 16px 22px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--muted); font-size: 16px; line-height: 1.6;
+    }
+
+    /* Diagram figure */
+    figure.diagram { margin: 44px 0; }
+    figure.diagram .mermaid {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 22px; overflow-x: auto;
+    }
+    figure.diagram figcaption {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 12.5px; color: var(--muted); margin-top: 10px; text-align: center;
+    }
+
+    /* Author footer */
+    .author {
+      margin-top: 72px; padding-top: 28px; border-top: 1px solid var(--border);
+      display: flex; gap: 16px; align-items: flex-start;
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+    }
+    .author .avatar {
+      flex: 0 0 auto; width: 48px; height: 48px; border-radius: 50%;
+      background: var(--accent); color: #010e1b; display: grid; place-items: center;
+      font-weight: 700; font-family: Raleway, sans-serif;
+    }
+    .author .bio { font-size: 14px; color: var(--muted); line-height: 1.6; }
+    .author .bio strong { color: var(--fg); display: block; margin-bottom: 4px; font-size: 15px; }
+
+    /* Related */
+    .related { margin-top: 64px; }
+    .related h4 {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 13px; text-transform: uppercase; letter-spacing: .1em;
+      color: var(--muted); margin: 0 0 20px;
+    }
+    .related .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
+    .related .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; overflow: hidden; text-decoration: none; color: inherit;
+      transition: transform .2s, border-color .2s; display: block;
+    }
+    .related .card:hover { transform: translateY(-3px); border-color: var(--accent); }
+    .related .card .thumb { aspect-ratio: 16/9; background: linear-gradient(135deg, #0a2540, #04101f); }
+    .related .card .body { padding: 14px 14px 16px; }
+    .related .card .title {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 14.5px; font-weight: 600; color: var(--fg); line-height: 1.35;
+    }
+    .related .card:hover .title { color: var(--accent); }
+    .related .card .excerpt { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
+    .related .card .date {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 11px; color: var(--muted); margin-top: 8px;
+    }
+
+    /* Language switch */
+    .lang-switch {
+      margin-top: 56px; padding-top: 24px; border-top: 1px solid var(--border);
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 15px; color: var(--muted); text-align: center;
+    }
+    .lang-switch a {
+      color: var(--accent); text-decoration: none;
+      border-bottom: 1px solid rgba(18,214,64,.4);
+    }
+
+    /* Click-to-zoom for diagrams */
+    .mermaid { cursor: zoom-in; }
+    .zoom-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.85);
+      display: none; align-items: center; justify-content: center;
+      z-index: 9999; padding: 40px; cursor: zoom-out;
+    }
+    .zoom-overlay.open { display: flex; }
+    .zoom-overlay svg {
+      max-width: 95vw; max-height: 90vh; width: auto; height: auto;
+      background: var(--surface); border-radius: 12px; padding: 24px;
+    }
+
+    @media (max-width: 640px) {
+      .related .grid { grid-template-columns: 1fr; }
+      nav.top { flex-wrap: wrap; gap: 12px 18px; }
+    }
+  
+    .series { margin-top: 56px; padding-top: 22px; border-top: 1px solid var(--border);
+      font-family: Raleway, -apple-system, system-ui, sans-serif; font-size: 14px;
+      color: var(--muted); text-align: center; line-height: 2; }
+    .series a { color: var(--muted); text-decoration: none; }
+    .series a:hover { color: var(--accent); }
+    .series a.cur { color: var(--accent); font-weight: 600; }
+</style>
+</head>
+<body>
+  <article class="wrap">
+        <nav class="top">
+      <span class="wordmark">Daniel Liu</span>
+      <a href="../index.html">Home</a>
+      <a href="index.html" class="active">Blog</a>
+      <a href="../index.html#projects">Projects</a>
+      <a href="../index.html#skills">Skills</a>
+    </nav>
+    <div class="eyebrow" data-od-id="headline">Architecture &middot; Part 2 of 4</div>
+    <h1 data-od-id="headline">WhatsApp Integration: Cloud API, Webhooks, Failure Isolation</h1>
+    <p class="deck" data-od-id="headline">A source-grounded walk through Hermes's WhatsApp path — and the retry-, failure-, and mention-handling details that make it safe in a busy group chat.</p>
+        <div class="byline">
+      <div class="avatar">DL</div>
+      <span>By Daniel Liu &middot; August 23, 2026 &middot; 8 min read</span>
+    </div>
+        <figure class="hero-diagram">
+      <pre class="mermaid">
+flowchart LR
+  M["Meta Webhook"] -->|"POST message"| C["WhatsAppCloudAdapter.connect()"]
+  C -->|"MessageEvent"| G["GatewayRunner"]
+  G --> A["AIAgent"]
+  A -->|"final_response"| G
+  G -->|"send()"| API["Graph API"]
+  API --> U["User / Group"]
+      </pre>
+      <figcaption>The WhatsApp path: a webhook delivers inbound messages; the Graph API carries replies back out.</figcaption>
+    </figure>
+    <div data-od-id="body">
+      <p>This is part 2 of a 4-part series (1: Message Gateway, 2: WhatsApp, 3: Self-Improving, 4: Long-Term Memory), based on the <strong>real source</strong> of <code>hermes-agent</code>. Here we go one level down into a concrete adapter: WhatsApp, which rides Meta's <strong>Cloud API</strong>.</p>
+
+      <h2>The Cloud API shape</h2>
+      <p>WhatsApp uses a webhook to <em>receive</em> messages and the Graph API to <em>send</em> them. <code>WhatsAppCloudAdapter.connect()</code> (<code>gateway/platforms/whatsapp_cloud.py:435</code>) registers the webhook verification handshake and the inbound message callback. Once verified, every user message arrives as a webhook POST, gets normalized into a <code>MessageEvent</code>, and flows into the GatewayRunner we covered in part 1.</p>
+
+      <h2>Retry-resistance</h2>
+      <p>Meta's webhook <strong>redelivers</strong> — a message can arrive two or three times. The adapter guards with <code>_dedup_wamid</code>, keyed on the platform's message id, so one message never triggers two replies. Without it, every flaky delivery would double your agent's answer (and its cost).</p>
+
+      <h2>Failure containment</h2>
+      <p>When dispatch to a recipient fails, the handler only <code>log</code>s — it does <strong>not throw</strong>. One undeliverable message must not crash the entire webhook-processing loop, or every other conversation on that adapter goes dark. Containment at the edge keeps one bad send from cascading.</p>
+
+      <figure class="diagram">
+        <pre class="mermaid">
+flowchart TD
+  W["Webhook POST"] --> D{"_dedup_wamid?"}
+  D -->|"seen before"| X["drop duplicate"]
+  D -->|"new"| N["normalize to MessageEvent"]
+  N --> H["GatewayRunner"]
+  H --> S["send via Graph API"]
+  S -->|"ok"| OK["delivered"]
+  S -->|"error"| L["log only — do NOT throw"]
+        </pre>
+        <figcaption>Figure 1 — Inbound dedup and outbound failure containment. Redelivery is dropped; a failed send is logged, not thrown.</figcaption>
+      </figure>
+
+      <h2>Who actually gets a reply</h2>
+      <p>In a group, you don't want the bot answering every line. A mention / allowlist policy in the adapter mixin decides "only reply when @-mentioned," so it stays a helper instead of a spam bot. This is the same pattern every chatty adapter needs; WhatsApp just makes it visible because groups are noisy.</p>
+
+      <h2>Takeaways</h2>
+      <ul>
+        <li><strong>In / out split:</strong> webhook for receive, Graph API for send; <code>connect()</code> wires both.</li>
+        <li><strong>Retry-resistance:</strong> <code>_dedup_wamid</code> stops redelivery from producing duplicate replies.</li>
+        <li><strong>Failure containment:</strong> a failed <code>send()</code> logs and moves on — one bad message never kills the loop.</li>
+        <li><strong>Mention gating:</strong> only @-mentions get a reply in groups, keeping it a helper, not a spammer.</li>
+      </ul>
+    </div>
+        <div class="author">
+      <div class="avatar">DL</div>
+      <div class="bio">
+        <strong>Daniel Liu</strong>
+        Software engineer writing about AI agents, infrastructure, and the small tools that wire them into everyday chat apps. This blog is where I document what I learn by building.
+      </div>
+    </div>
+    <p class="series">Part of a 4-part series: <a href="hermes-gateway.html">1 &middot; Gateway</a> &middot; <a href="hermes-whatsapp.html" class="cur">2 &middot; WhatsApp</a> &middot; <a href="hermes-self-improving.html">3 &middot; Self-Improving</a> &middot; <a href="hermes-memory.html">4 &middot; Memory</a></p>
+    <p class="lang-switch">Prefer 中文? <a href="hermes-whatsapp-zh.html">Read this article in 中文 &rarr;</a></p>
+  </article>
+  <div class="zoom-overlay" id="zoomOverlay"></div>
+  <script>
+    document.querySelectorAll('.mermaid').forEach(function(el){
+      el.addEventListener('click', function(){
+        var svg = el.querySelector('svg'); if(!svg) return;
+        var overlay = document.getElementById('zoomOverlay');
+        overlay.innerHTML = ''; overlay.appendChild(svg.cloneNode(true));
+        overlay.classList.add('open');
+      });
+    });
+    var zoomOverlay = document.getElementById('zoomOverlay');
+    zoomOverlay.addEventListener('click', function(){ this.classList.remove('open'); this.innerHTML=''; });
+    document.addEventListener('keydown', function(e){ if(e.key==='Escape'){ zoomOverlay.classList.remove('open'); zoomOverlay.innerHTML=''; } });
+  </script>
+</body>
+</html>
