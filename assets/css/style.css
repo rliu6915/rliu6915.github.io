@@ -1161,5 +1161,8 @@ section.standalone {
   opacity: 1;
   height: auto;
   overflow: visible;
-  padding: 90px 0 40px;
+  padding: 120px 0 40px;
 }
+/* Standalone pages use the compact fixed header (not the full-screen hero). */
+body:has(#header.header-top) #header { height: 90px; position: fixed; }
+body:has(#header.header-top) { padding-top: 90px; }
