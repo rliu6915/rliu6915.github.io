@@ -1,0 +1,3 @@
+node_modules/
+*.mjs
+_render_check.png
