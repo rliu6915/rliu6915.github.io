@@ -184,6 +184,19 @@
       border-bottom: 1px solid rgba(18,214,64,.4);
     }
 
+    /* Click-to-zoom for diagrams */
+    .mermaid { cursor: zoom-in; }
+    .zoom-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.85);
+      display: none; align-items: center; justify-content: center;
+      z-index: 9999; padding: 40px; cursor: zoom-out;
+    }
+    .zoom-overlay.open { display: flex; }
+    .zoom-overlay svg {
+      max-width: 95vw; max-height: 90vh; width: auto; height: auto;
+      background: var(--surface); border-radius: 12px; padding: 24px;
+    }
+
     @media (max-width: 640px) {
       .related .grid { grid-template-columns: 1fr; }
       nav.top { flex-wrap: wrap; gap: 12px 18px; }
@@ -316,5 +329,20 @@ flowchart LR
     <p class="lang-switch">Prefer 中文? <a href="hermes-agent-deep-dive-zh.html">Read this article in 中文 →</a></p>
 
   </article>
+  <div class="zoom-overlay" id="zoomOverlay"></div>
+  <script>
+    document.querySelectorAll('.mermaid').forEach(function(el){
+      el.addEventListener('click', function(){
+        var svg = el.querySelector('svg'); if(!svg) return;
+        var overlay = document.getElementById('zoomOverlay');
+        overlay.innerHTML = ''; overlay.appendChild(svg.cloneNode(true));
+        overlay.classList.add('open');
+      });
+    });
+    var zoomOverlay = document.getElementById('zoomOverlay');
+    zoomOverlay.addEventListener('click', function(){ this.classList.remove('open'); this.innerHTML=''; });
+    document.addEventListener('keydown', function(e){ if(e.key==='Escape'){ zoomOverlay.classList.remove('open'); zoomOverlay.innerHTML=''; } });
+  </script>
+
 </body>
 </html>

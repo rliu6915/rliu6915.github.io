@@ -316,5 +316,20 @@ flowchart LR
     <p class="lang-switch">Read in English? <a href="hermes-agent-deep-dive.html">Read this article in English →</a></p>
 
   </article>
+  <div class="zoom-overlay" id="zoomOverlay"></div>
+  <script>
+    document.querySelectorAll('.mermaid').forEach(function(el){
+      el.addEventListener('click', function(){
+        var svg = el.querySelector('svg'); if(!svg) return;
+        var overlay = document.getElementById('zoomOverlay');
+        overlay.innerHTML = ''; overlay.appendChild(svg.cloneNode(true));
+        overlay.classList.add('open');
+      });
+    });
+    var zoomOverlay = document.getElementById('zoomOverlay');
+    zoomOverlay.addEventListener('click', function(){ this.classList.remove('open'); this.innerHTML=''; });
+    document.addEventListener('keydown', function(e){ if(e.key==='Escape'){ zoomOverlay.classList.remove('open'); zoomOverlay.innerHTML=''; } });
+  </script>
+
 </body>
 </html>
