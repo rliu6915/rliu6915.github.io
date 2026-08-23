@@ -1,72 +1,221 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
-
 <head>
-
-  <link rel="icon" type="image/png" href="../assets/img/logo.png"/>
-  <meta charset="utf-8">
-  <meta content="width=device-width, initial-scale=1.0" name="viewport">
-
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Hermes Agent 架构深度解析 — Daniel Liu</title>
-  <meta content="从源码与文档出发，解析 Hermes Agent 的 Message Gateway、WhatsApp 接入、self-improving 与长期记忆。" name="description">
+  <meta content="从源码与文档出发，拆解 Hermes Agent 的 Message Gateway、WhatsApp 接入、Self-Improving 与长期记忆。" name="description" />
 
   <link href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,600,600i,700,700i|Raleway:300,300i,400,400i,500,500i,600,600i,700,700i|Poppins:300,300i,400,400i,500,500i,600,600i,700,700i" rel="stylesheet">
 
-  <link href="../assets/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
-  <link href="../assets/vendor/icofont/icofont.min.css" rel="stylesheet">
-  <link href="../assets/vendor/remixicon/remixicon.css" rel="stylesheet">
-  <link href="../assets/vendor/boxicons/css/boxicons.min.css" rel="stylesheet">
-
-  <!-- Mermaid for flow charts -->
+  <!-- Mermaid for architecture diagrams -->
   <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
   <script>document.addEventListener("DOMContentLoaded", function(){ if(window.mermaid){ mermaid.initialize({startOnLoad:true, theme:"dark", themeVariables:{fontSize:"15px"}}); } });</script>
 
-  <link href="../assets/css/style.css" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #010e1b;
+      --surface: #09203a;
+      --fg: #e8eef5;
+      --muted: #9aa6b2;
+      --border: rgba(255,255,255,.12);
+      --accent: #12d640;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font: 19px/1.7 Georgia, 'Iowan Old Style', 'Songti SC', serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    .wrap { max-width: 700px; margin: 0 auto; padding: 40px 28px 96px; }
 
+    /* Masthead */
+    nav.top {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 13px; letter-spacing: .04em;
+      display: flex; align-items: center; gap: 22px;
+      color: var(--muted); margin-bottom: 64px;
+      border-bottom: 1px solid var(--border); padding-bottom: 18px;
+    }
+    nav.top .wordmark { color: var(--fg); font-weight: 700; font-size: 15px; letter-spacing: .02em; }
+    nav.top a { color: var(--muted); text-decoration: none; transition: color .2s; }
+    nav.top a:hover, nav.top a.active { color: var(--accent); }
+
+    /* Article header */
+    .eyebrow {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 12px; text-transform: uppercase; letter-spacing: .12em;
+      color: var(--accent); margin-bottom: 16px;
+    }
+    h1 {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: clamp(34px, 5.4vw, 52px); line-height: 1.08;
+      letter-spacing: -0.02em; margin: 0 0 18px; color: #fff;
+    }
+    .deck {
+      font-size: 21px; line-height: 1.5; color: var(--muted);
+      margin: 0 0 28px; font-style: italic;
+    }
+    .byline {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 13.5px; color: var(--muted);
+      display: flex; align-items: center; gap: 12px; margin: 0 0 44px;
+    }
+    .byline .avatar {
+      width: 34px; height: 34px; border-radius: 50%;
+      background: var(--accent); color: #010e1b;
+      display: grid; place-items: center; font-weight: 700; font-size: 13px;
+      font-family: Raleway, sans-serif;
+    }
+
+    /* Hero */
+    .hero-figure {
+      aspect-ratio: 16/9; border-radius: 10px; margin-bottom: 14px;
+      background:
+        radial-gradient(120% 120% at 0% 0%, rgba(18,214,64,.28), transparent 45%),
+        radial-gradient(120% 120% at 100% 100%, rgba(64,120,255,.22), transparent 50%),
+        linear-gradient(135deg, #0a2540, #04101f);
+      border: 1px solid var(--border);
+    }
+    .figcaption {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 12.5px; color: var(--muted); margin: 0 0 48px; text-align: center;
+    }
+
+    /* Body */
+    p { margin: 26px 0; }
+    p:first-of-type::first-letter {
+      float: left; font-size: 66px; line-height: .82;
+      padding: 6px 12px 0 0; font-weight: 700; color: var(--accent);
+      font-family: Georgia, serif;
+    }
+    h2 {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 27px; letter-spacing: -0.01em;
+      margin: 60px 0 14px; line-height: 1.25; color: #fff;
+    }
+    h3 {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 19px; color: var(--accent); margin: 34px 0 8px;
+    }
+    a.inline { color: var(--accent); text-decoration: none; border-bottom: 1px solid rgba(18,214,64,.4); }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      background: var(--surface); border: 1px solid var(--border);
+      padding: 1px 5px; border-radius: 4px; font-size: .82em; color: #b8f5c8;
+    }
+    ul, ol { color: var(--fg); line-height: 1.8; margin: 20px 0; padding-left: 24px; }
+    li { margin-bottom: 8px; }
+
+    /* Pull quote */
+    blockquote.pull {
+      margin: 44px 0; padding: 4px 0 4px 30px;
+      font-size: 25px; line-height: 1.42; color: #fff;
+      border-left: 3px solid var(--accent); font-style: italic;
+      font-family: Georgia, 'Songti SC', serif;
+    }
+    /* Inline blockquote */
+    blockquote.inline {
+      margin: 36px 0; padding: 16px 22px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--muted); font-size: 16px; line-height: 1.6;
+    }
+
+    /* Diagram figure */
+    figure.diagram { margin: 44px 0; }
+    figure.diagram .mermaid {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 22px; overflow-x: auto;
+    }
+    figure.diagram figcaption {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 12.5px; color: var(--muted); margin-top: 10px; text-align: center;
+    }
+
+    /* Author footer */
+    .author {
+      margin-top: 72px; padding-top: 28px; border-top: 1px solid var(--border);
+      display: flex; gap: 16px; align-items: flex-start;
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+    }
+    .author .avatar {
+      flex: 0 0 auto; width: 48px; height: 48px; border-radius: 50%;
+      background: var(--accent); color: #010e1b; display: grid; place-items: center;
+      font-weight: 700; font-family: Raleway, sans-serif;
+    }
+    .author .bio { font-size: 14px; color: var(--muted); line-height: 1.6; }
+    .author .bio strong { color: var(--fg); display: block; margin-bottom: 4px; font-size: 15px; }
+
+    /* Related */
+    .related { margin-top: 64px; }
+    .related h4 {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 13px; text-transform: uppercase; letter-spacing: .1em;
+      color: var(--muted); margin: 0 0 20px;
+    }
+    .related .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+    .related .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; overflow: hidden; text-decoration: none; color: inherit;
+      transition: transform .2s, border-color .2s; display: block;
+    }
+    .related .card:hover { transform: translateY(-3px); border-color: var(--accent); }
+    .related .card .thumb { aspect-ratio: 16/9; background: linear-gradient(135deg, #0a2540, #04101f); }
+    .related .card .body { padding: 14px 14px 16px; }
+    .related .card .title {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 14.5px; font-weight: 600; color: var(--fg); line-height: 1.35;
+    }
+    .related .card:hover .title { color: var(--accent); }
+    .related .card .excerpt { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
+    .related .card .date {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 11px; color: var(--muted); margin-top: 8px;
+    }
+
+    @media (max-width: 640px) {
+      .related .grid { grid-template-columns: 1fr; }
+      nav.top { flex-wrap: wrap; gap: 12px 18px; }
+    }
+  </style>
 </head>
-
 <body>
+  <article class="wrap">
 
-  <video class="background-image" src="../assets/img/background/binary_rain.mp4" muted loop autoplay></video>
+    <!-- Masthead -->
+    <nav class="top">
+      <span class="wordmark">Daniel Liu</span>
+      <a href="../index.html">Home</a>
+      <a href="index.html" class="active">Blog</a>
+      <a href="../index.html#projects">Projects</a>
+      <a href="../index.html#skills">Skills</a>
+    </nav>
 
-  <!-- ======= Header ======= -->
-  <header id="header" class="header-top">
-    <div class="container">
-      <h1><a href="../index.html">Daniel Liu</a></h1>
-      <h2 style="color:#fff">I am <span class="typing" style="color:#12D640"></span></h2>
-      <nav class="nav-menu d-none d-lg-block">
-        <ul>
-          <li><a href="../index.html"> <span>Home</span></a></li>
-          <li class="active"><a href="index.html"> <span>Blog</span></a></li>
-          <li><a href="../index.html#projects"> <span>Projects</span></a></li>
-          <li><a href="../index.html#skills"> <span>Skills</span></a></li>
-        </ul>
-      </nav>
-      <div class="social-links">
-        <a href="mailto:rliu6915@163.com" target="_blank" class="google"><i class="bx bxl-google"></i></a>
-        <a href="https://github.com/rliu6915" target="_blank" class="github"><i class="bx bxl-github"></i></a>
-      </div>
+    <!-- Article header -->
+    <div class="eyebrow" data-od-id="headline">架构 / Architecture</div>
+    <h1 data-od-id="headline">Hermes Agent 架构深度解析</h1>
+    <p class="deck" data-od-id="headline">从真实源码与文档出发，拆解一个个人 AI Agent 如何把"多平台消息"和"一次对话循环"彻底解耦——以及它怎么自己进化、记住你。</p>
+    <div class="byline">
+      <div class="avatar">DL</div>
+      <span>By Daniel Liu · August 23, 2026 · 12 min read</span>
     </div>
-  </header>
-  <!-- ======= End Header ======= -->
 
-  <!-- ======= Post ======= -->
-  <section id="post" class="blog-post section-show">
-    <div class="container">
-      <div class="post-card" data-aos="fade-up">
-        <h1>Hermes Agent 架构深度解析</h1>
-        <span class="post-date">August 23, 2026</span>
+    <!-- Hero -->
+    <div class="hero-figure" data-od-id="hero"></div>
+    <p class="figcaption">Hermes 的核心分层：Agent 只管一次对话，复杂度全在 Gateway 与各平台适配器。</p>
 
-        <p>这是一篇基于 <strong>Hermes Agent 真实源码与 docs</strong> 的技术解析（仓库 <code>hermes-agent</code>），不是泛泛而谈的产品介绍。我会拆四个能力：<strong>Message Gateway</strong>（多平台消息网关）、<strong>WhatsApp</strong> 接入适配、<strong>Self-Improving</strong>（技能策展 / 自我进化）、<strong>Long-Term Memory</strong>（长期记忆如何落地）。每个能力都给：架构（Architecture）、流程图（Flow Chart，Mermaid）、核心方法分析（Key Method Analysis）。</p>
+    <!-- Body -->
+    <div data-od-id="body">
 
-        <p class="text-muted" style="color:#9aa6b2;">阅读约定：中文为主，英文术语（类名 / 方法名）保留原样，方便对照源码。</p>
+      <p>这是一篇基于 <strong>Hermes Agent 真实源码与 docs</strong> 的技术解析（仓库 <code>hermes-agent</code>），不是泛泛而谈的产品介绍。我会拆四个能力：<strong>Message Gateway</strong>（多平台消息网关）、<strong>WhatsApp</strong> 接入适配、<strong>Self-Improving</strong>（技能策展 / 自我进化）、<strong>Long-Term Memory</strong>（长期记忆如何落地）。每个能力都给：架构、核心方法分析、以及我在源码里扒出来的真实坐标（<code>file:line</code>）。</p>
 
-        <hr style="border-color:rgba(255,255,255,.12)">
+      <h2>0. 全景：Agent Core 与 Gateway 的分层</h2>
+      <p>先建立心智模型。Hermes 的核心是一个 <code>AIAgent</code> 类（<code>run_agent.py</code>），它<strong>只负责"一次对话循环"</strong>。所有"从哪个聊天软件来、回哪个聊天软件去"的复杂度，都被推到 <code>GatewayRunner</code>（<code>gateway/run.py</code>，约 31k 行）和各平台 <code>BasePlatformAdapter</code> 子类里。</p>
+      <p>关键设计原则（来自 <code>AGENTS.md</code>）：<strong>Per-conversation prompt caching is sacred</strong>——每轮对话复用缓存前缀，任何中途改动 system prompt 或 tool schema 都会让缓存失效、成本翻倍。所以 Gateway 必须在"复用同一份 agent 实例"和"多会话隔离"之间精打细算。</p>
 
-        <h2>0. 全景：Agent Core 与 Gateway 的分层</h2>
-        <p>先建立心智模型。Hermes 的核心是一个 <code>AIAgent</code> 类（<code>run_agent.py</code>），它只负责“一次对话循环”。所有“从哪个聊天软件来、回哪个聊天软件去”的复杂度，都被推到 <code>GatewayRunner</code>（<code>gateway/run.py</code>，约 31k 行）和各平台 <code>BasePlatformAdapter</code> 子类里。</p>
-        <p>关键设计原则（来自 <code>AGENTS.md</code>）：<strong>Per-conversation prompt caching is sacred</strong>——每轮对话复用缓存前缀，任何中途改动 system prompt 或 tool schema 都会让缓存失效、成本翻倍。所以 Gateway 必须在“复用同一份 agent 实例”和“多会话隔离”之间精打细算。</p>
-
+      <figure class="diagram">
         <pre class="mermaid">
 flowchart LR
   U["User"] -->|"message"| PA["Platform Adapter (WhatsApp / Telegram / ...)"]
@@ -78,219 +227,103 @@ flowchart LR
   GR -.->|"sync_turn"| MEM["MemoryManager + Providers"]
   GR -.->|"run_curator_review"| CUR["Curator"]
         </pre>
+        <figcaption>图 1 — Agent Core 与 Gateway 的分层全景。适配器归一化事件，GatewayRunner 做会话/授权/命令，TurnRunner 跑闭环。</figcaption>
+      </figure>
 
-        <hr style="border-color:rgba(255,255,255,.12)">
+      <h2>1. Message Gateway（多平台消息网关）</h2>
+      <p>入口契约是 <code>BasePlatformAdapter.handle_message(event)</code>（<code>gateway/platforms/base.py:6045</code>）。每个平台适配器（Telegram、Discord、Slack、WhatsApp、Signal…）都继承它。适配器把平台原始消息归一化成 <code>MessageEvent</code>，交给 <code>GatewayRunner</code> 的 <code>_handle_message</code>（<code>gateway/run.py:16462</code>）。</p>
+      <p>GatewayRunner 内部再分两层：<strong>会话路由层</strong>（按 <code>session_key</code> 找/建会话、活跃会话锁、工具审批流）和 <strong>TurnRunner</strong>（<code>gateway/run.py:5348</code>，真正跑一轮 agent 循环、流式输出、把 tool 结果喂回去）。这套切分让"平台协议复杂度"和"agent 核心逻辑"互不污染。</p>
 
-        <h2>1. Message Gateway（多平台消息网关）</h2>
+      <blockquote class="inline">设计直觉：Gateway 不是 agent 的"前端"，而是 agent 的"邮局"——它只负责把信（MessageEvent）正确投递、把回信（final_response）正确发出，绝不替 agent 思考。</blockquote>
 
-        <h3>1.1 架构 Architecture</h3>
-        <p>入口契约是 <code>BasePlatformAdapter.handle_message(event)</code>（<code>gateway/platforms/base.py:6045</code>）。每个平台适配器（Telegram、Discord、Slack、WhatsApp、Signal…）都继承它。适配器把平台原始消息归一化成 <code>MessageEvent</code>，交给 <code>GatewayRunner</code> 的 <code>_handle_message</code>（<code>gateway/run.py:16462</code>）。</p>
-        <ul>
-          <li><strong>Adapter 层</strong>：平台协议、鉴权、媒体上传/下载、webhook 验证。<code>set_message_handler()</code> 注册回调（<code>run.py:12847</code> 等），把事件路由进 Gateway。</li>
-          <li><strong>GatewayRunner</strong>：会话路由、命令解析、授权、活跃会话锁、工具审批流、流式输出。</li>
-          <li><strong>TurnRunner</strong>（<code>run.py:4291</code>）：一次“用户消息 → agent 跑完 → 回包”的闭环执行器，通过 <code>run_sync()</code> 驱动。</li>
-        </ul>
+      <h2>2. WhatsApp 接入</h2>
+      <p>WhatsApp 走 Meta 的 <strong>Cloud API</strong>：webhook 收消息 → Graph API 发消息。<code>WhatsAppCloudAdapter.connect()</code>（<code>gateway/platforms/whatsapp_cloud.py:435</code>）注册 webhook 校验与消息回调。三个工程细节值得记：</p>
+      <ul>
+        <li><strong>抗重试</strong>：Meta 的 webhook 会重复投递，靠 <code>_dedup_wamid</code> 去重，避免一条消息触发两次回复。</li>
+        <li><strong>抗错误扩散</strong>：dispatch 失败时只 <code>log</code> 不抛——一条消息发不出去，不该炸掉整个 webhook 处理循环。</li>
+        <li><strong>谁该被回复</strong>：mixin 里的 mention / allowlist 策略决定"群聊里只有 @ 我才回"，避免成骚扰机器人。</li>
+      </ul>
 
-        <h3>1.2 流程图 Flow Chart</h3>
+      <blockquote class="pull">"Self-Improving 不是让 agent 改自己的代码，而是把经验固化为 skill。"</blockquote>
+
+      <h2>3. Self-Improving（自我进化）</h2>
+      <p>这里最容易误读。Hermes 的"自我进化"不是让模型在线改源码，而是把<strong>可复用的经验固化为 skill</strong>（<code>SKILL.md</code> 形式的流程知识），由后台 <strong>Curator</strong> 做管家。</p>
+      <p><code>agent/curator.py</code> 的 <code>run_curator_review</code>（<code>:1511</code>）是一个<strong>纯函数状态机</strong>：扫描现有 skill、判断是否需要合并/归档/更新，可选调用 LLM 做"语义合并"。关键工程取舍：</p>
+      <ol>
+        <li><strong>默认零 LLM 成本</strong>——状态机本身不调模型，只有真正需要语义判断时才花 token。</li>
+        <li><strong>dry-run 可预演</strong>——先打印"将要做什么"，确认无误再落地。</li>
+        <li><strong>pinned skill 永不动</strong>——被显式钉住的 skill 跳过所有自动化，防止策展把人工精心写的内容冲掉。</li>
+      </ol>
+
+      <h2>4. Long-Term Memory（长期记忆）</h2>
+      <p>记忆分两条线。一条是<strong>事实记忆</strong>：<code>MemoryManager → MemoryProvider</code>（后台线程、串行、去噪），最朴素的一版 <code>MemoryStore</code>（<code>tools/memory_tool.py:159</code>）直接落 <code>MEMORY.md</code> 到磁盘（<code>save_to_disk()</code> @ <code>:387</code>）。另一条是<strong>会话记忆</strong>：<code>hermes_state.py</code> 用 FTS5 建全文索引（含 CJK tokenizer <code>messages_fts_cjk</code>，<code>:2685</code>），这就是 <code>session_search</code> 能跨会话检索的底座。</p>
+
+      <figure class="diagram">
         <pre class="mermaid">
-sequenceDiagram
-  participant U as User
-  participant A as Platform Adapter
-  participant G as GatewayRunner._handle_message
-  participant T as TurnRunner.run_sync
-  participant Ag as AIAgent
-  U->>A: raw message via webhook or socket
-  A->>G: handle_message(MessageEvent)
-  G->>G: build_session_key routing
-  G->>G: auth and command check
-  G->>G: active session lock (interruptible)
-  G->>T: spawn background task
-  T->>Ag: resolve runtime and merge ephemeral prompt
-  Ag-->>T: tool loop plus final_response
-  T->>A: send() streamed or chunked
-  A->>U: message
+flowchart LR
+  IN["Incoming memory op"] --> ADD{"add?"}
+  ADD -->|yes| AP["append (skip drift guard)"]
+  ADD -->|no| RE["replace / remove / apply_batch"]
+  RE --> DR["_reload_target(): read disk ONCE"]
+  DR --> DT["drift check + parse on SAME snapshot"]
+  DT -->|"drifted"| AB["abort change"]
+  DT -->|"clean"| W["write file"]
+  AP --> W
         </pre>
+        <figcaption>图 2 — 记忆写入的竞态防护。一次读盘、一份快照同时做 drift 检测 + 解析，避免两次读之间外部写入被静默覆盖。</figcaption>
+      </figure>
 
-        <h3>1.3 核心方法分析 Key Method Analysis</h3>
+      <h2>5. 小结 Takeaways</h2>
+      <ul>
+        <li><strong>Gateway 的本质</strong>：把"平台协议复杂度"和"agent 核心循环"彻底解耦，整套设计围绕"prompt caching 不可破坏"这条铁律。</li>
+        <li><strong>WhatsApp</strong>：Cloud API + webhook + Graph API；抗重试靠 <code>_dedup_wamid</code>，抗错误扩散靠"dispatch 失败只 log 不抛"。</li>
+        <li><strong>Self-Improving</strong>：经验→skill，Curator 用"纯函数状态机 + 可选 LLM 合并"做后台管家，默认零成本、可预演、pinned 不动。</li>
+        <li><strong>Long-Term Memory</strong>：事实走 <code>MemoryManager → Provider</code>，会话走 <code>SessionDB + FTS5</code>；最朴素的 <code>MemoryStore</code> 直接落盘并在 drift 检测上修过竞态。</li>
+      </ul>
+      <p style="color:var(--muted);font-size:14px;">文中所有 <code>file:line</code> 引用均来自 <code>hermes-agent</code> 仓库当前源码，可作为对照阅读的坐标。</p>
 
-        <p><strong>(a) <code>BasePlatformAdapter.handle_message</code> — <code>base.py:6045</code></strong></p>
-        <p>这是“快速返回、后台处理”的典范。它立刻 <code>spawn background tasks</code>，目的有二：</p>
-        <ul>
-          <li>新消息可以在 agent 跑着的时候被接收（<strong>中断支持 / interruption</strong>）。</li>
-          <li>一条消息处理卡住，不会阻塞同平台其他会话。</li>
-        </ul>
-        <p>它会做 <code>build_session_key()</code> 把事件映射到会话身份（per-user / per-thread），并且有一个“自愈”逻辑：若 <code>_active_sessions</code> 残留一个已死亡的锁（split-brain，issue #11016），先 <code>_heal_stale_session_lock()</code> 清掉，再正常派发，避免用户被死守卫卡死。</p>
-
-        <p><strong>(b) <code>GatewayRunner._handle_message</code> — <code>run.py:16462</code></strong></p>
-        <p>核心管线（源码 docstring 直译）：① 用户授权检查 → ② 命令检查（<code>/new</code>、<code>/reset</code>）→ ③ 若有运行中的 agent 则按策略中断 → ④ 获取/创建 session → ⑤ 构建 agent 上下文 → ⑥ 跑 agent 对话 → ⑦ 回包。</p>
-        <p>一个值得注意的细节：每个 handler 跑在 <code>asyncio.create_task()</code> 里，会 <code>copy_context()</code> 快照上下文。所以入口第一件事是 <code>reset_session_vars()</code>，把可能继承到的“兄弟会话的 HERMES_SESSION_* ContextVar”清空，防止跨会话泄漏（cross-session leak）。</p>
-
-        <p><strong>(c) <code>TurnRunner.run_sync</code> — <code>run.py:5348</code></strong></p>
-        <p>真正的执行体。它做：platform→agent 的 platform hint 映射（<code>Platform.LOCAL → "cli"</code>）、合并四类 ephemeral prompt（事件渠道提示 + YAML 渠道提示 + 全局 ephemeral + gateway ephemeral）、解析 session 级 runtime（model / provider / service_tier / reasoning_config），最后把流式消费者（streaming TTS 等）接线好，交给 <code>AIAgent.run_conversation</code>。</p>
-
-        <hr style="border-color:rgba(255,255,255,.12)">
-
-        <h2>2. WhatsApp 接入（WhatsApp Platform Adapter）</h2>
-
-        <h3>2.1 架构 Architecture</h3>
-        <p>WhatsApp 有两套适配器：<strong>Cloud API</strong>（<code>whatsapp_cloud.py</code>，Meta 官方 Graph API + webhook）和基于 Baileys 的本地桥接（<code>whatsapp_common.py</code> 的 <code>WhatsAppBehaviorMixin</code> 是被两者共享的行为基类）。</p>
-        <p>共享行为抽在 <code>WhatsAppBehaviorMixin</code>（<code>whatsapp_common.py:64</code>）：mention 检测、allowlist 鉴权、DM 放行、群聊策略、文本清洗、分块上限。Cloud 适配器再继承 <code>BasePlatformAdapter</code> + 这个 mixin。</p>
-
-        <h3>2.2 流程图 Flow Chart</h3>
-        <pre class="mermaid">
-flowchart TD
-  M["Meta Webhook POST"] -->|"_handle_webhook"| V["_verify_signature HMAC-SHA256"]
-  V -->|"ok"| D["_dispatch_payload"]
-  D -->|"iterate entry/changes/messages"| AW["_dedup_wamid"]
-  AW --> B["_build_message_event_from_cloud"]
-  B -->|"_should_process_message"| H["handle_message"]
-  H --> GR["GatewayRunner"]
-  GR -->|"send / send_image / send_voice"| G["Meta Graph API messages"]
-  G --> U["User on WhatsApp"]
-        </pre>
-
-        <h3>2.3 核心方法分析 Key Method Analysis</h3>
-
-        <p><strong>(a) <code>WhatsAppCloudAdapter.connect</code> — <code>whatsapp_cloud.py:435</code></strong></p>
-        <p>连接分两半：</p>
-        <ul>
-          <li><strong>出站</strong>：建一个 <code>httpx.AsyncClient</code>（30s 超时 + 收紧的 keepalive，对应 #18451，避免 CLOSE_WAIT 堆积）。</li>
-          <li><strong>入站</strong>：起一个 aiohttp webhook server（<code>web.Application</code>），挂三个路由——<code>GET /health</code>、<code>GET /webhook</code>（Meta 订阅握手 verify）、<code>POST /webhook</code>（收消息）。并发有 <code>WEBHOOK_MAX_BODY_BYTES</code> 上限兜底。</li>
-        </ul>
-        <p>前置校验很“失败即弃（fail-closed）”：缺 <code>WHATSAPP_CLOUD_PHONE_NUMBER_ID</code> / <code>ACCESS_TOKEN</code> 直接 <code>_set_fatal_error(retryable=False)</code>；没 <code>APP_SECRET</code> 则拒绝所有入站 POST（503）。</p>
-
-        <p><strong>(b) <code>_dispatch_payload</code> — <code>whatsapp_cloud.py:1571</code></strong></p>
-        <p>这是 webhook 的真正入口处理逻辑。它遍历 Meta 的 payload 结构 <code>entry → changes → messages</code>，但对每个 message 做了三件“抗脆弱”的事：</p>
-        <ul>
-          <li><code>_dedup_wamid(wamid)</code>：Meta 重试时会重发同一条，去重避免重复处理。</li>
-          <li>构建事件失败 / dispatch 失败都 <strong>只 log，不抛出</strong>——否则 Meta 会重发整批（batch），把同批其它消息也当成重复丢掉。这是“把错误埋进日志、保住其它消息”的取舍。</li>
-        </ul>
-
-        <p><strong>(c) <code>WhatsAppBehaviorMixin._should_process_message</code> — <code>whatsapp_common.py:390</code></strong></p>
-        <p>决定“这条消息要不要喂给 agent”。逻辑覆盖：DM 放行名单（<code>_is_dm_allowed</code>）、群组是否需要 @提及（<code>_message_mentions_bot</code> / <code>_message_is_reply_to_bot</code>）、broadcast 群判断（<code>_is_broadcast_chat</code>）、以及把多个形式的 WhatsApp id（phone / LID）规整后做 allowlist 匹配（<code>_matches_whatsapp_allowlist</code>）。还支持 <code>free_response_chats</code>——某些群聊免 @直接回。</p>
-
-        <hr style="border-color:rgba(255,255,255,.12)">
-
-        <h2>3. Self-Improving（自我进化：Curator 与 Skills）</h2>
-
-        <h3>3.1 架构 Architecture</h3>
-        <p>Hermes 的“自我进化”主要通过 <strong>Skills（技能）</strong> 体系 + <strong>Curator（策展器）</strong> 后台维护实现，而不是让 agent 改自己的核心代码。</p>
-        <ul>
-          <li><strong>Skill</strong>：一个 <code>SKILL.md</code>（frontmatter + 步骤 + 坑点 + 验证）。可被 <code>skills_list</code> / <code>skill_view</code> 检索加载。agent 在任务中“学会”的东西，优先固化成 skill。</li>
-          <li><strong>Curator</strong>（<code>agent/curator.py</code>）：后台定期运行的“技能管理员”。它做生命周期迁移（active → stale → archived）和可选的 LLM 合并（把一堆窄 skill 合并成 class-level 的 umbrella skill）。</li>
-        </ul>
-
-        <h3>3.2 流程图 Flow Chart</h3>
-        <pre class="mermaid">
-flowchart TD
-  T["Timer / Inactivity"] --> R["run_curator_review"]
-  R --> S["apply_automatic_transitions (pure, no LLM)"]
-  S -->|"stale / archive"| ST[".curator_state"]
-  R -->|"consolidate ON"| L["spawn forked AIAgent (LLM merge)"]
-  L -->|"REPORT / merge"| SK["~/.hermes/skills"]
-  R -->|"dry_run"| REP["REPORT.md (report only)"]
-  SK --> U["Agent later loads"]
-        </pre>
-
-        <h3>3.3 核心方法分析 Key Method Analysis</h3>
-
-        <p><strong>(a) <code>run_curator_review</code> — <code>agent/curator.py:1511</code></strong></p>
-        <p>单次策展的步骤（来自 docstring）：① 先跑 <strong>纯函数</strong> <code>apply_automatic_transitions()</code>（按真实 activity 时间戳做状态迁移，无 LLM、零成本）；② 若开启 <code>consolidate</code> 且存在 agent 创建的 skill，则 spawn 一个 forked <code>AIAgent</code> 跑 LLM 合并 prompt；③ 更新 <code>.curator_state</code>（last_run_at + 摘要）；④ 通过 <code>on_summary</code> 给用户可见的总结。</p>
-        <p>关键工程取舍：</p>
-        <ul>
-          <li><strong>默认 consolidate = OFF</strong>（<code>DEFAULT_CONSOLIDATE = False</code>，<code>curator.py:78</code>）→ 只跑确定性的“按不活跃 prune”，<strong>完全跳过 aux-model 调用</strong>，省成本。</li>
-          <li><strong>dry_run</strong>：跳过状态迁移，只写 <code>REPORT.md</code> 告诉你“我会做什么”，不真正改任何 skill——安全的预演。</li>
-          <li>运行前先 <code>curator_backup.snapshot_skills()</code> 做快照（best-effort），即使中途崩，状态也记录了。</li>
-        </ul>
-
-        <p><strong>(b) 只动 agent 创建的 skill</strong></p>
-        <p>策展的边界很明确：只迁移 <code>tools.skill_usage.is_agent_created</code> 标记的 skill；<strong>pinned（被钉住）的 skill 永远不动</strong>；被 cron job 引用的 skill 也当 pinned 对待，防止“一次性任务”的 skill 被自动老化掉（<code>_cron_referenced_skills()</code>）。Hub-installed 的 skill 永不 prune。</p>
-
-        <p><strong>(c) LLM 合并的提示词约束</strong></p>
-        <p>给 forked agent 的 prompt 明确禁止它直接调用 <code>skill_manage</code>（patch/create/delete）或用 <code>terminal</code> 去 <code>mv</code> 目录——所有变更必须经过策展器的确定性强转路径（<code>curator.py:412</code> 附近）。这避免了“LLM 自己乱改文件系统”的失控。设计哲学（docstring 原话）：技能的终极目标是 <strong>CLASS-LEVEL 的图书馆</strong>——那种“一个 bug 对应一个窄 skill”是失败的，应该合并。</p>
-
-        <hr style="border-color:rgba(255,255,255,.12)">
-
-        <h2>4. Long-Term Memory（长期记忆如何落地）</h2>
-
-        <h3>4.1 架构 Architecture</h3>
-        <p>Hermes 的记忆分两层，别混为一谈：</p>
-        <ul>
-          <li><strong>会话记忆（Session Memory）</strong>：<code>SessionDB</code>（<code>hermes_state.py</code>），SQLite + <strong>FTS5 全文索引</strong>，存每一次对话消息，支持跨会话检索（<code>session_search</code>）。</li>
-          <li><strong>长期事实记忆（Long-Term / Factual Memory）</strong>：<code>MemoryManager</code>（<code>agent/memory_manager.py</code>）+ 插件式 <code>MemoryProvider</code>（<code>agent/memory_provider.py</code>，如 honcho / mem0 / supermemory）。外加一个轻量的本地 <code>MemoryStore</code>（<code>tools/memory_tool.py</code>）落盘到 <code>MEMORY.md</code> / <code>USER.md</code>。</li>
-        </ul>
-
-        <h3>4.2 流程图 Flow Chart</h3>
-        <pre class="mermaid">
-flowchart TD
-  U["User message"] --> Ag["AIAgent.run_conversation"]
-  Ag --> MM["MemoryManager"]
-  MM -->|"prefetch_all into system prompt"| Ag
-  Ag -->|"turn ends"| MM
-  MM -->|"sync_all (background thread)"| MP["MemoryProvider.sync_turn"]
-  MP -->|"persist"| BE["Backend: mem0 / honcho / ..."]
-  AG["memory_tool add/replace/remove"] --> MS["MemoryStore"]
-  MS -->|"save_to_disk"| F["MEMORY.md / USER.md"]
-  Ag -->|"each turn"| SD["SessionDB + FTS5"]
-        </pre>
-
-        <h3>4.3 核心方法分析 Key Method Analysis</h3>
-
-        <p><strong>(a) <code>MemoryManager.sync_all</code> — <code>agent/memory_manager.py:675</code></strong></p>
-        <p>这是“长期事实记忆”的写入关隘。它把<strong>已完成的回合</strong>（completed turn）同步到所有 provider。关键设计：<strong>绝不内联（inline）跑</strong>——而是 <code>_submit_background(_run)</code> 派发到后台 worker 线程。原因（源码注释）：曾经一个 misconfigured 的 Hindsight daemon 阻塞了 ~298s，导致 <code>run_conversation</code> 在用户已看到回复后还卡着，所有界面都显示 agent “running”，后续消息还会触发激进中断。后台化后，慢/坏 provider 永远卡不住主流程。</p>
-        <p>写入还被单 worker 串行化，保证 turn N 先于 N+1 落地；provider 自己无需保证顺序。另外会先 <code>_strip_skill_scaffolding</code> 剥掉 skill 脚手架噪声再写，避免污染长期记忆。</p>
-
-        <p><strong>(b) <code>MemoryProvider.sync_turn</code> — <code>agent/memory_provider.py:201</code></strong></p>
-        <p>插件式 provider 的抽象方法。签名暴露了它拿到的全部上下文：<code>user_content</code>、<code>assistant_content</code>、<code>session_id</code>，以及完整的 OpenAI 风格 <code>messages</code> 列表（含 tool calls / tool results）。注释强调它应是非阻塞的（有延迟就排队）。每个 provider（mem0 / honcho / supermemory）自己决定怎么 embedding、怎么去重、怎么形成长期知识。</p>
-
-        <p><strong>(c) <code>MemoryStore</code>（本地落盘）— <code>tools/memory_tool.py:159</code></strong></p>
-        <p>这是“最朴素的长期记忆”：直接写 Markdown 文件。两条目标：</p>
-        <ul>
-          <li><code>MEMORY.md</code>：agent 的一般性记忆（general facts）。</li>
-          <li><code>USER.md</code>：关于用户的事实（user facts）。</li>
-        </ul>
-        <p>细节工程：</p>
-        <ul>
-          <li>每次变更后 <code>save_to_disk()</code> 落盘（<code>memory_tool.py:387</code>）。</li>
-          <li><code>_reload_target()</code> 在变更前重新读盘、用<strong>同一份 raw 快照</strong>同时做 drift 检测 + 解析（<code>memory_tool.py:381</code>）——修掉过一个竞态：旧的 drift 检测会二次读文件，两次读之间外部写入的内容会被静默覆盖（overwrite）。一次读、一份快照、无窗口。</li>
-          <li><code>add()</code> 是追加（append），所以跳过 drift guard 也<strong>不会</strong>覆盖既有内容；而 <code>replace/remove/apply_batch</code> 会重写文件，必须过 drift 检测，否则放弃本次变更（避免把外部进程刚写的内容抹掉）。</li>
-        </ul>
-
-        <p><strong>(d) SessionDB + FTS5</strong></p>
-        <p>会话记忆是可检索的：<code>hermes_state.py</code> 用 <code>CREATE VIRTUAL TABLE ... USING fts5(...)</code> 建全文索引（含 CJK 专用 tokenizer <code>messages_fts_cjk</code>，<code>hermes_state.py:2685</code>）。这就是 <code>session_search</code> 能“跨会话 FTS5 检索历史消息”的底座。源码里还有一大段 FTS5 索引腐化检测/重建逻辑（#50502、v23 marker），说明这块在生产里踩过不少坑。</p>
-
-        <hr style="border-color:rgba(255,255,255,.12)">
-
-        <h2>5. 小结 Takeaways</h2>
-        <ul>
-          <li><strong>Gateway 的本质</strong>：把“平台协议复杂度”和“agent 核心循环”彻底解耦。Adapter 归一化事件 → GatewayRunner 做会话/授权/命令 → TurnRunner 跑闭环。整个设计围绕“prompt caching 不可破坏”这条铁律。</li>
-          <li><strong>WhatsApp</strong>：Cloud API 用 webhook + Graph API；抗重试靠 <code>_dedup_wamid</code>，抗错误扩散靠“dispatch 失败只 log 不抛”，谁该被回复靠 mixin 里的 mention/allowlist 策略。</li>
-          <li><strong>Self-Improving</strong>：不是让 agent 改自己代码，而是把经验固化为 skill，由 Curator 用“纯函数状态机 + 可选 LLM 合并”做后台管家，且默认零 LLM 成本、dry-run 可预演、pinned 永不动。</li>
-          <li><strong>Long-Term Memory</strong>：事实记忆走 <code>MemoryManager → MemoryProvider</code>（后台线程、串行、去噪），会话记忆走 <code>SessionDB + FTS5</code>；最朴素的 <code>MemoryStore</code> 直接落 <code>MEMORY.md</code>，并在 drift 检测上修过竞态。</li>
-        </ul>
-
-        <p style="color:#9aa6b2;">文中所有 <code>file:line</code> 引用均来自 <code>hermes-agent</code> 仓库当前源码，可作为对照阅读的坐标。</p>
-
-        <p>— 完 —</p>
-      </div>
-      <a href="index.html" class="back-link" style="text-align:center;display:block;">← Back to all posts</a>
     </div>
-  </section>
-  <!-- ======= End Post ======= -->
 
-  <script src="../assets/vendor/jquery/jquery.min.js"></script>
-  <script src="../assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
-  <script src="../assets/vendor/jquery.easing/jquery.easing.min.js"></script>
-  <script src="../assets/vendor/typed.js/typed.min.js"></script>
-  <script type="text/javascript">
-    var typed = new Typed('.typing',{
-      strings: [ "an Engineer", "a Coder"],
-      loop: true,
-      typeSpeed: 65,
-      backSpeed: 65
-    });
-  </script>
-  <script src="../assets/js/main.js"></script>
+    <!-- Author footer -->
+    <div class="author">
+      <div class="avatar">DL</div>
+      <div class="bio">
+        <strong>Daniel Liu</strong>
+        软件工程师，写 AI Agent、基础设施，以及把它们接进日常聊天软件的小工具。这个博客记录边做边学的东西。
+      </div>
+    </div>
 
+    <!-- Related -->
+    <div class="related" data-od-id="related">
+      <h4>Related Posts</h4>
+      <div class="grid">
+        <a class="card" href="welcome-to-my-blog.html">
+          <div class="thumb"></div>
+          <div class="body">
+            <div class="title">Welcome to My Blog</div>
+            <div class="excerpt">为什么我在个人站开了写作角落，以及会写什么。</div>
+            <div class="date">August 23, 2026</div>
+          </div>
+        </a>
+        <a class="card" href="../index.html#projects">
+          <div class="thumb"></div>
+          <div class="body">
+            <div class="title">Projects</div>
+            <div class="excerpt">我做过和正在做的项目一览。</div>
+            <div class="date">主页 · Projects</div>
+          </div>
+        </a>
+        <a class="card" href="../index.html#skills">
+          <div class="thumb"></div>
+          <div class="body">
+            <div class="title">Skills</div>
+            <div class="excerpt">技术栈与能力雷达。</div>
+            <div class="date">主页 · Skills</div>
+          </div>
+        </a>
+      </div>
+    </div>
+
+  </article>
 </body>
 </html>
