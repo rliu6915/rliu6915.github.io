@@ -244,6 +244,19 @@ flowchart LR
 
       <h2>The entry contract</h2>
       <p>Every platform adapter — Telegram, Discord, Slack, WhatsApp, Signal, and the rest — extends <code>BasePlatformAdapter.handle_message(event)</code> (<code>gateway/platforms/base.py:6045</code>). The adapter's only job is to <strong>normalize</strong> the platform's raw message into a <code>MessageEvent</code> and hand it to <code>GatewayRunner._handle_message</code> (<code>gateway/run.py:16462</code>). That normalization is the seam: the agent never sees a Telegram update vs. a WhatsApp webhook — it only ever sees a <code>MessageEvent</code>.</p>
+      <p>Here is the method for real. Note it <strong>returns immediately</strong>: the actual work is spawned as a background task, so a new message can interrupt a running agent instead of being queued behind it (<code>gateway/platforms/base.py:6045</code>):</p>
+      <pre class="src"><code>async def handle_message(self, event: MessageEvent) -> None:
+    """Process an incoming message. Returns quickly by spawning
+    background tasks, so new messages can be processed even while an
+    agent is running (interruption support)."""
+    if not self._message_handler:
+        return
+    if event.allow_gateway_control:
+        coerce_plaintext_gateway_command(event)
+    # ... Telegram topic recovery, then build the session_key ...
+    session_key = build_session_key(event.source, ...)
+    # route into GatewayRunner._handle_message(event, session_key, ...)</code></pre>
+      <p>The line that matters is <code>build_session_key(event.source, ...)</code>: the same platform + chat always yields the same key, which is exactly what the next layer routes on. The adapter hands off here; everything after belongs to the Gateway.</p>
 
       <h2>Two layers inside GatewayRunner</h2>
       <p>Inside, GatewayRunner splits into a <strong>session-routing layer</strong> (resolve or create a session by <code>session_key</code>, take an active-session lock, run the tool-approval flow) and the <strong>TurnRunner</strong> (<code>gateway/run.py:5348</code>), which actually runs one agent loop, streams output, and feeds tool results back. This split is what keeps "platform protocol complexity" and "agent core logic" from contaminating each other.</p>
@@ -278,20 +291,6 @@ flowchart TD
         <li><strong>Two internal layers:</strong> session routing (resolve/lock/approve) vs. TurnRunner (run the loop) — protocol complexity never reaches the agent core.</li>
         <li><strong>Caching is the reason:</strong> a pure "one conversation loop" agent is what lets prompt caching stay intact across 20+ platforms.</li>
       </ul>
-      <h2>Source walkthrough: what the entry contract actually looks like</h2>
-      <p>Above we said <code>handle_message</code> only normalizes. Here it is for real (<code>gateway/platforms/base.py:6045</code>) — note it <strong>returns immediately</strong>, because the real work is spawned as a background task so a new message can interrupt a running agent:</p>
-      <pre class="src"><code>async def handle_message(self, event: MessageEvent) -> None:
-    """Process an incoming message. Returns quickly by spawning
-    background tasks, so new messages can be processed even while an
-    agent is running (interruption support)."""
-    if not self._message_handler:
-        return
-    if event.allow_gateway_control:
-        coerce_plaintext_gateway_command(event)
-    # ... Telegram topic recovery, then build the session_key ...
-    session_key = build_session_key(event.source, ...)
-    # route into GatewayRunner._handle_message(event, session_key, ...)</code></pre>
-      <p>The important line is <code>build_session_key(event.source, ...)</code>: the same platform + chat always yields the same key, which is exactly what the next layer routes on. The adapter hands off here; everything after belongs to the Gateway.</p>
     </div>
         <div class="author">
       <div class="avatar">DL</div>

@@ -71,8 +71,11 @@ def series(cur, lang):
     return '<p class="series">%s%s</p>' % (prefix, ' &middot; '.join(parts))
 
 # ---------- content ----------
-# NOTE: hero/body/code use ''' (single-quote triple) because code blocks embed
-# Python docstrings written with """ (double-quote triple) — they must not clash.
+# Conventions:
+#  * hero/body use ''' (single-quote triple) because code blocks embed Python
+#    docstrings written with """ (double-quote triple) — they must not clash.
+#  * Source code is shown INLINE at the point of reference, not in a separate
+#    trailing "Source walkthrough" section.
 CONTENT = {
  'gateway': {
   'en': {
@@ -97,6 +100,19 @@ flowchart LR
 
       <h2>The entry contract</h2>
       <p>Every platform adapter — Telegram, Discord, Slack, WhatsApp, Signal, and the rest — extends <code>BasePlatformAdapter.handle_message(event)</code> (<code>gateway/platforms/base.py:6045</code>). The adapter's only job is to <strong>normalize</strong> the platform's raw message into a <code>MessageEvent</code> and hand it to <code>GatewayRunner._handle_message</code> (<code>gateway/run.py:16462</code>). That normalization is the seam: the agent never sees a Telegram update vs. a WhatsApp webhook — it only ever sees a <code>MessageEvent</code>.</p>
+      <p>Here is the method for real. Note it <strong>returns immediately</strong>: the actual work is spawned as a background task, so a new message can interrupt a running agent instead of being queued behind it (<code>gateway/platforms/base.py:6045</code>):</p>
+      <pre class="src"><code>async def handle_message(self, event: MessageEvent) -> None:
+    """Process an incoming message. Returns quickly by spawning
+    background tasks, so new messages can be processed even while an
+    agent is running (interruption support)."""
+    if not self._message_handler:
+        return
+    if event.allow_gateway_control:
+        coerce_plaintext_gateway_command(event)
+    # ... Telegram topic recovery, then build the session_key ...
+    session_key = build_session_key(event.source, ...)
+    # route into GatewayRunner._handle_message(event, session_key, ...)</code></pre>
+      <p>The line that matters is <code>build_session_key(event.source, ...)</code>: the same platform + chat always yields the same key, which is exactly what the next layer routes on. The adapter hands off here; everything after belongs to the Gateway.</p>
 
       <h2>Two layers inside GatewayRunner</h2>
       <p>Inside, GatewayRunner splits into a <strong>session-routing layer</strong> (resolve or create a session by <code>session_key</code>, take an active-session lock, run the tool-approval flow) and the <strong>TurnRunner</strong> (<code>gateway/run.py:5348</code>), which actually runs one agent loop, streams output, and feeds tool results back. This split is what keeps "platform protocol complexity" and "agent core logic" from contaminating each other.</p>
@@ -131,20 +147,6 @@ flowchart TD
         <li><strong>Two internal layers:</strong> session routing (resolve/lock/approve) vs. TurnRunner (run the loop) — protocol complexity never reaches the agent core.</li>
         <li><strong>Caching is the reason:</strong> a pure "one conversation loop" agent is what lets prompt caching stay intact across 20+ platforms.</li>
       </ul>''',
-    'code': '''      <h2>Source walkthrough: what the entry contract actually looks like</h2>
-      <p>Above we said <code>handle_message</code> only normalizes. Here it is for real (<code>gateway/platforms/base.py:6045</code>) — note it <strong>returns immediately</strong>, because the real work is spawned as a background task so a new message can interrupt a running agent:</p>
-      <pre class="src"><code>async def handle_message(self, event: MessageEvent) -> None:
-    """Process an incoming message. Returns quickly by spawning
-    background tasks, so new messages can be processed even while an
-    agent is running (interruption support)."""
-    if not self._message_handler:
-        return
-    if event.allow_gateway_control:
-        coerce_plaintext_gateway_command(event)
-    # ... Telegram topic recovery, then build the session_key ...
-    session_key = build_session_key(event.source, ...)
-    # route into GatewayRunner._handle_message(event, session_key, ...)</code></pre>
-      <p>The important line is <code>build_session_key(event.source, ...)</code>: the same platform + chat always yields the same key, which is exactly what the next layer routes on. The adapter hands off here; everything after belongs to the Gateway.</p>''',
   },
   'zh': {
     'title': '消息网关：把平台与 Agent 彻底解耦',
@@ -168,6 +170,19 @@ flowchart LR
 
       <h2>入口契约</h2>
       <p>每个平台适配器——Telegram、Discord、Slack、WhatsApp、Signal 等——都继承 <code>BasePlatformAdapter.handle_message(event)</code>（<code>gateway/platforms/base.py:6045</code>）。适配器的唯一职责是把平台原始消息<strong>归一化</strong>成 <code>MessageEvent</code>，交给 <code>GatewayRunner._handle_message</code>（<code>gateway/run.py:16462</code>）。这条归一化就是接缝：agent 从来看不到"Telegram 更新 vs WhatsApp webhook"的区别，它只看到 <code>MessageEvent</code>。</p>
+      <p>方法本身长这样（<code>gateway/platforms/base.py:6045</code>）。注意它<strong>立刻 return</strong>：真正的处理被 spawn 成后台任务，好让消息能一边跑 agent 一边被新消息打断，而不是排在后面：</p>
+      <pre class="src"><code>async def handle_message(self, event: MessageEvent) -> None:
+    """Process an incoming message. Returns quickly by spawning
+    background tasks, so new messages can be processed even while an
+    agent is running (interruption support)."""
+    if not self._message_handler:
+        return
+    if event.allow_gateway_control:
+        coerce_plaintext_gateway_command(event)
+    # ... Telegram topic recovery, then build the session_key ...
+    session_key = build_session_key(event.source, ...)
+    # route into GatewayRunner._handle_message(event, session_key, ...)</code></pre>
+      <p>关键在 <code>build_session_key(event.source, ...)</code>：同一平台同一会话永远算出同一个 key，这正是下一层"按会话路由"的依据。适配器到此交权，后面全归 Gateway。</p>
 
       <h2>GatewayRunner 内部的两层</h2>
       <p>内部，GatewayRunner 分成<strong>会话路由层</strong>（按 <code>session_key</code> 找/建会话、取活跃会话锁、跑工具审批流）和 <strong>TurnRunner</strong>（<code>gateway/run.py:5348</code>，真正跑一轮 agent 循环、流式输出、把 tool 结果喂回去）。这套切分让"平台协议复杂度"和"agent 核心逻辑"互不污染。</p>
@@ -202,20 +217,6 @@ flowchart TD
         <li><strong>内部两层：</strong>会话路由（解析/加锁/审批）与 TurnRunner（跑循环）——协议复杂度永不触及 agent 核心。</li>
         <li><strong>分层是为了缓存：</strong>"纯一次对话循环"的 agent，才让 prompt caching 在 20+ 平台间不被破坏。</li>
       </ul>''',
-    'code': '''      <h2>源码走读：入口契约到底长什么样</h2>
-      <p>上面说 <code>handle_message</code> 只做归一化。它真实的样子（<code>gateway/platforms/base.py:6045</code>）——注意它<strong>立刻 return</strong>，因为真正的处理被 spawn 成后台任务，好让消息能一边跑 agent 一边被新消息打断：</p>
-      <pre class="src"><code>async def handle_message(self, event: MessageEvent) -> None:
-    """Process an incoming message. Returns quickly by spawning
-    background tasks, so new messages can be processed even while an
-    agent is running (interruption support)."""
-    if not self._message_handler:
-        return
-    if event.allow_gateway_control:
-        coerce_plaintext_gateway_command(event)
-    # ... Telegram topic recovery, then build the session_key ...
-    session_key = build_session_key(event.source, ...)
-    # route into GatewayRunner._handle_message(event, session_key, ...)</code></pre>
-      <p>关键在 <code>build_session_key(event.source, ...)</code>：同一平台同一会话永远算出同一个 key，这正是下一层"按会话路由"的依据。适配器到此交权，后面全归 Gateway。</p>''',
   },
  },
  'whatsapp': {
@@ -240,7 +241,19 @@ flowchart LR
     'body': '''      <p>This is part 2 of a 4-part series (1: Message Gateway, 2: WhatsApp, 3: Self-Improving, 4: Long-Term Memory), based on the <strong>real source</strong> of <code>hermes-agent</code>. Here we go one level down into a concrete adapter: WhatsApp, which rides Meta's <strong>Cloud API</strong>.</p>
 
       <h2>The Cloud API shape</h2>
-      <p>WhatsApp uses a webhook to <em>receive</em> messages and the Graph API to <em>send</em> them. <code>WhatsAppCloudAdapter.connect()</code> (<code>gateway/platforms/whatsapp_cloud.py:435</code>) registers the webhook verification handshake and the inbound message callback. Once verified, every user message arrives as a webhook POST, gets normalized into a <code>MessageEvent</code>, and flows into the GatewayRunner we covered in part 1.</p>
+      <p>WhatsApp uses a webhook to <em>receive</em> messages and the Graph API to <em>send</em> them. <code>WhatsAppCloudAdapter.connect()</code> (<code>gateway/platforms/whatsapp_cloud.py:435</code>) registers the webhook verification handshake and the inbound message callback. Once verified, every user message arrives as a webhook POST, gets normalized into a <code>MessageEvent</code>, and flows into the GatewayRunner we covered in part 1. For real, the method first <strong>refuses to start</strong> if deps or config are missing, then builds the two transports — an inbound webhook server and an outbound <code>httpx</code> client:</p>
+      <pre class="src"><code>async def connect(self, *, is_reconnect: bool = False) -> bool:
+    if not check_whatsapp_cloud_requirements():
+        self._set_fatal_error("whatsapp_cloud_deps_missing", ...)
+        return False
+    if not self._phone_number_id or not self._access_token:
+        self._set_fatal_error("whatsapp_cloud_unconfigured", ...)
+        return False
+    # Outbound HTTP client with tight keepalive.
+    self._http_client = httpx.AsyncClient(
+        timeout=30.0, limits=platform_httpx_limits())
+    # Inbound webhook server next ...</code></pre>
+      <p>Note the two <strong>fail-closed</strong> guards up front: a missing dependency or an unconfigured phone number id / token stops the adapter before it can half-start. That discipline is what keeps a misconfigured bot from silently eating webhooks.</p>
 
       <h2>Retry-resistance</h2>
       <p>Meta's webhook <strong>redelivers</strong> — a message can arrive two or three times. The adapter guards with <code>_dedup_wamid</code>, keyed on the platform's message id, so one message never triggers two replies. Without it, every flaky delivery would double your agent's answer (and its cost).</p>
@@ -272,20 +285,6 @@ flowchart TD
         <li><strong>Failure containment:</strong> a failed <code>send()</code> logs and moves on — one bad message never kills the loop.</li>
         <li><strong>Mention gating:</strong> only @-mentions get a reply in groups, keeping it a helper, not a spammer.</li>
       </ul>''',
-    'code': '''      <h2>Source walkthrough: what connect() actually sets up</h2>
-      <p>The article names <code>WhatsAppCloudAdapter.connect()</code> (<code>gateway/platforms/whatsapp_cloud.py:435</code>) as the wiring point. For real, it first <strong>refuses to start</strong> if deps or config are missing, then builds the two transports — an inbound webhook server and an outbound <code>httpx</code> client:</p>
-      <pre class="src"><code>async def connect(self, *, is_reconnect: bool = False) -> bool:
-    if not check_whatsapp_cloud_requirements():
-        self._set_fatal_error("whatsapp_cloud_deps_missing", ...)
-        return False
-    if not self._phone_number_id or not self._access_token:
-        self._set_fatal_error("whatsapp_cloud_unconfigured", ...)
-        return False
-    # Outbound HTTP client with tight keepalive.
-    self._http_client = httpx.AsyncClient(
-        timeout=30.0, limits=platform_httpx_limits())
-    # Inbound webhook server next ...</code></pre>
-      <p>Note the two <strong>fail-closed</strong> guards up front: a missing dependency or an unconfigured phone number id / token stops the adapter before it can half-start. That discipline is what keeps a misconfigured bot from silently eating webhooks.</p>''',
   },
   'zh': {
     'title': 'WhatsApp 接入：Cloud API、Webhook 与失败隔离',
@@ -308,7 +307,19 @@ flowchart LR
     'body': '''      <p>这是 4 篇系列的第 2 / 4 篇（1 消息网关、2 WhatsApp、3 自我进化、4 长期记忆），基于 <code>hermes-agent</code> 的<strong>真实源码</strong>。这里下钻到一个具体适配器：走 Meta <strong>Cloud API</strong> 的 WhatsApp。</p>
 
       <h2>Cloud API 的形态</h2>
-      <p>WhatsApp 用 webhook <em>收</em>消息、用 Graph API <em>发</em>消息。<code>WhatsAppCloudAdapter.connect()</code>（<code>gateway/platforms/whatsapp_cloud.py:435</code>）注册 webhook 校验握手与入站消息回调。校验通过后，每条用户消息以 webhook POST 到达，被归一化成 <code>MessageEvent</code>，流入第 1 篇讲的 GatewayRunner。</p>
+      <p>WhatsApp 用 webhook <em>收</em>消息、用 Graph API <em>发</em>消息。<code>WhatsAppCloudAdapter.connect()</code>（<code>gateway/platforms/whatsapp_cloud.py:435</code>）注册 webhook 校验握手与入站消息回调。校验通过后，每条用户消息以 webhook POST 到达，被归一化成 <code>MessageEvent</code>，流入第 1 篇讲的 GatewayRunner。真实代码里，它先<strong>拒绝启动</strong>（缺依赖或配置缺失就返回），再建两条传输——入站 webhook 服务、出站 <code>httpx</code> 客户端：</p>
+      <pre class="src"><code>async def connect(self, *, is_reconnect: bool = False) -> bool:
+    if not check_whatsapp_cloud_requirements():
+        self._set_fatal_error("whatsapp_cloud_deps_missing", ...)
+        return False
+    if not self._phone_number_id or not self._access_token:
+        self._set_fatal_error("whatsapp_cloud_unconfigured", ...)
+        return False
+    # Outbound HTTP client with tight keepalive.
+    self._http_client = httpx.AsyncClient(
+        timeout=30.0, limits=platform_httpx_limits())
+    # Inbound webhook server next ...</code></pre>
+      <p>注意开头的两道<strong>失败即停</strong>护栏：缺依赖、或 phone number id / token 没配，适配器在半启动前就停下。正是这份纪律，让一个配错的 bot 不会默默吞掉 webhook。</p>
 
       <h2>抗重试</h2>
       <p>Meta 的 webhook 会<strong>重复投递</strong>——一条消息可能到两三次。适配器用 <code>_dedup_wamid</code>（按平台消息 id 去重）守住，让一条消息绝不触发两次回复。没有它，每次抖动投递都会让你的 agent 答两遍（也多花一倍钱）。</p>
@@ -340,20 +351,6 @@ flowchart TD
         <li><strong>失败隔离：</strong><code>send()</code> 失败只记日志不抛出——一条坏消息永不拖垮循环。</li>
         <li><strong>@ 门控：</strong>群里只有被 @ 才回，保持帮手定位，不做喷子。</li>
       </ul>''',
-    'code': '''      <h2>源码走读：connect() 到底搭了什么</h2>
-      <p>文章把 <code>WhatsAppCloudAdapter.connect()</code>（<code>gateway/platforms/whatsapp_cloud.py:435</code>）称作接线点。真实情况是：它先<strong>拒绝启动</strong>（缺依赖或配置缺失就返回），再建两条传输——入站 webhook 服务、出站 <code>httpx</code> 客户端：</p>
-      <pre class="src"><code>async def connect(self, *, is_reconnect: bool = False) -> bool:
-    if not check_whatsapp_cloud_requirements():
-        self._set_fatal_error("whatsapp_cloud_deps_missing", ...)
-        return False
-    if not self._phone_number_id or not self._access_token:
-        self._set_fatal_error("whatsapp_cloud_unconfigured", ...)
-        return False
-    # Outbound HTTP client with tight keepalive.
-    self._http_client = httpx.AsyncClient(
-        timeout=30.0, limits=platform_httpx_limits())
-    # Inbound webhook server next ...</code></pre>
-      <p>注意开头的两道<strong>失败即停</strong>护栏：缺依赖、或 phone number id / token 没配，适配器在半启动前就停下。正是这份纪律，让一个配错的 bot 不会默默吞掉 webhook。</p>''',
   },
  },
  'self-improving': {
@@ -381,7 +378,21 @@ flowchart LR
       <blockquote class="pull">"Self-Improving isn't about letting the agent edit its own code — it's about crystallizing experience into a skill."</blockquote>
 
       <h2>The Curator state machine</h2>
-      <p><code>agent/curator.py</code>'s <code>run_curator_review</code> (<code>:1511</code>) is a <strong>pure-function state machine</strong>: it scans existing skills, decides whether to merge / archive / update, and optionally calls an LLM for "semantic merge." The key trade-offs:</p>
+      <p><code>agent/curator.py</code>'s <code>run_curator_review</code> (<code>:1511</code>) is a <strong>pure-function state machine</strong>: it scans existing skills, decides whether to merge / archive / update, and optionally calls an LLM for "semantic merge." The function signature exposes the knobs — a synchronous/daemon choice, a dry-run that reports without mutating, and a <code>consolidate</code> flag that gates the LLM umbrella-building pass:</p>
+      <pre class="src"><code>def run_curator_review(
+    on_summary=None, synchronous=False,
+    dry_run=False, consolidate=None) -> Dict[str, Any]:
+    """Execute a single curator review pass.
+      1. Apply automatic state transitions (pure, no LLM).
+      2. If consolidation enabled AND agent-created skills exist,
+         spawn a forked AIAgent for the LLM review prompt.
+      3. Update .curator_state with last_run_at + summary.
+      4. Invoke on_summary with a user-visible description.
+    """
+    if consolidate is None:
+        consolidate = get_consolidate()   # OFF by default
+    ...</code></pre>
+      <p>The comment on step 2 is the key: <strong>"consolidate OFF by default"</strong> means the forked LLM review is skipped entirely on a normal run — only the deterministic inactivity prune runs. That is exactly why the default costs zero tokens. The remaining trade-offs fall out of the same shape:</p>
       <ol>
         <li><strong>Zero LLM cost by default</strong> — the state machine itself never calls a model; tokens are spent only when genuine semantic judgment is required.</li>
         <li><strong>dry-run previewable</strong> — it prints "what it will do" first, so you confirm before anything lands on disk.</li>
@@ -409,22 +420,6 @@ flowchart TD
         <li><strong>Zero cost by default:</strong> LLM is used only for genuine semantic merges.</li>
         <li><strong>Safe by design:</strong> dry-run preview + pinned-skills-untouched keep curation from destroying hand-written content.</li>
       </ul>''',
-    'code': '''      <h2>Source walkthrough: what run_curator_review does</h2>
-      <p>The article calls <code>run_curator_review</code> (<code>agent/curator.py:1511</code>) a pure-function state machine. For real, the function signature shows its knobs: a synchronous/daemon choice, a dry-run that reports without mutating, and a <code>consolidate</code> flag that gates the LLM umbrella-building pass:</p>
-      <pre class="src"><code>def run_curator_review(
-    on_summary=None, synchronous=False,
-    dry_run=False, consolidate=None) -> Dict[str, Any]:
-    """Execute a single curator review pass.
-      1. Apply automatic state transitions (pure, no LLM).
-      2. If consolidation enabled AND agent-created skills exist,
-         spawn a forked AIAgent for the LLM review prompt.
-      3. Update .curator_state with last_run_at + summary.
-      4. Invoke on_summary with a user-visible description.
-    """
-    if consolidate is None:
-        consolidate = get_consolidate()   # OFF by default
-    ...</code></pre>
-      <p>The comment on step 2 is the key: <strong>"consolidate OFF by default"</strong> means the forked LLM review is skipped entirely on a normal run — only the deterministic inactivity prune runs. That is exactly why the default costs zero tokens.</p>''',
   },
   'zh': {
     'title': '自我进化：把经验固化为 Skill',
@@ -450,7 +445,21 @@ flowchart LR
       <blockquote class="pull">"Self-Improving 不是让 agent 改自己的代码，而是把经验固化为 skill。"</blockquote>
 
       <h2>Curator 状态机</h2>
-      <p><code>agent/curator.py</code> 的 <code>run_curator_review</code>（<code>:1511</code>）是一个<strong>纯函数状态机</strong>：扫描现有 skill、判断该合并/归档/更新，可选调用 LLM 做"语义合并"。关键取舍：</p>
+      <p><code>agent/curator.py</code> 的 <code>run_curator_review</code>（<code>:1511</code>）是一个<strong>纯函数状态机</strong>：扫描现有 skill、判断该合并/归档/更新，可选调用 LLM 做"语义合并"。函数签名露出它的旋钮：同步/守护进程选择、dry-run 只报告不改动、<code>consolidate</code> 开关门控 LLM 合并：</p>
+      <pre class="src"><code>def run_curator_review(
+    on_summary=None, synchronous=False,
+    dry_run=False, consolidate=None) -> Dict[str, Any]:
+    """Execute a single curator review pass.
+      1. Apply automatic state transitions (pure, no LLM).
+      2. If consolidation enabled AND agent-created skills exist,
+         spawn a forked AIAgent for the LLM review prompt.
+      3. Update .curator_state with last_run_at + summary.
+      4. Invoke on_summary with a user-visible description.
+    """
+    if consolidate is None:
+        consolidate = get_consolidate()   # 默认 OFF
+    ...</code></pre>
+      <p>第 2 步的注释是关键：<strong>"consolidate 默认 OFF"</strong> 意味着普通运行完全跳过 fork 出来的 LLM 评审——只跑确定性的闲置 prune。这正解释了为什么默认零 token。其余取舍都从同一结构里长出来：</p>
       <ol>
         <li><strong>默认零 LLM 成本</strong>——状态机本身不调模型，只有在真正需要语义判断时才花 token。</li>
         <li><strong>dry-run 可预演</strong>——先打印"将要做什么"，确认无误再落盘。</li>
@@ -478,22 +487,6 @@ flowchart TD
         <li><strong>默认零成本：</strong>只有真正的语义合并才用 LLM。</li>
         <li><strong>设计即安全：</strong>dry-run 预演 + pinned 不动，策展不会毁掉手写内容。</li>
       </ul>''',
-    'code': '''      <h2>源码走读：run_curator_review 做什么</h2>
-      <p>文章称 <code>run_curator_review</code>（<code>agent/curator.py:1511</code>）是纯函数状态机。真实签名露出它的旋钮：同步/守护进程选择、dry-run 只报告不改动、<code>consolidate</code> 开关门控 LLM 合并：</p>
-      <pre class="src"><code>def run_curator_review(
-    on_summary=None, synchronous=False,
-    dry_run=False, consolidate=None) -> Dict[str, Any]:
-    """Execute a single curator review pass.
-      1. Apply automatic state transitions (pure, no LLM).
-      2. If consolidation enabled AND agent-created skills exist,
-         spawn a forked AIAgent for the LLM review prompt.
-      3. Update .curator_state with last_run_at + summary.
-      4. Invoke on_summary with a user-visible description.
-    """
-    if consolidate is None:
-        consolidate = get_consolidate()   # 默认 OFF
-    ...</code></pre>
-      <p>第 2 步的注释是关键：<strong>"consolidate 默认 OFF"</strong> 意味着普通运行完全跳过 fork 出来的 LLM 评审——只跑确定性的闲置 prune。这正解释了为什么默认零 token。</p>''',
   },
  },
  'memory': {
@@ -517,13 +510,36 @@ flowchart LR
     'body': '''      <p>This is part 4 of 4 (1: Message Gateway, 2: WhatsApp, 3: Self-Improving, 4: Long-Term Memory), based on the <strong>real source</strong> of <code>hermes-agent</code>. Memory runs on two independent tracks.</p>
 
       <h2>Fact memory</h2>
-      <p>Facts flow through <code>MemoryManager → MemoryProvider</code> — a background thread, serial, de-noised. The simplest implementation, <code>MemoryStore</code> (<code>tools/memory_tool.py:159</code>), writes <code>MEMORY.md</code> straight to disk via <code>save_to_disk()</code> (<code>:387</code>). This is the durable "what I know about the user" store.</p>
+      <p>Facts flow through <code>MemoryManager → MemoryProvider</code> — a background thread, serial, de-noised. The simplest implementation, <code>MemoryStore</code> (<code>tools/memory_tool.py:159</code>), writes <code>MEMORY.md</code> straight to disk via <code>save_to_disk()</code> (<code>:387</code>). The method itself is tiny; the safety lives in <code>_write_file</code>, which uses an <strong>atomic temp-file + rename</strong> so concurrent readers never see a half-written file:</p>
+      <pre class="src"><code>def save_to_disk(self, target: str):
+    """Persist entries to the appropriate file. Called after every mutation."""
+    get_memory_dir().mkdir(parents=True, exist_ok=True)
+    self._write_file(self._path_for(target), self._entries_for(target))
+
+@staticmethod
+def _write_file(path: Path, entries: List[str]):
+    """Atomic temp-file + rename: readers see old OR new, never empty."""
+    content = ENTRY_DELIMITER.join(entries) if entries else ""
+    atomic_write_text(path, content, tmp_prefix=".mem_")</code></pre>
+      <p>This is the durable "what I know about the user" store.</p>
 
       <h2>Session memory</h2>
       <p>The other track is conversational: <code>hermes_state.py</code> builds a full-text index with FTS5, including a CJK tokenizer <code>messages_fts_cjk</code> (<code>:2685</code>). That index is the foundation behind <code>session_search</code> — the ability to retrieve across past sessions, not just within one.</p>
 
       <h2>Writing safely under concurrency</h2>
-      <p>The naive <code>MemoryStore</code> had a race: two reads of the file with a write between them could silently clobber an external edit. The fix reloads the target <strong>once</strong>, then runs both the drift check and the parse on that <strong>same snapshot</strong> — so an external write between operations can't be overwritten unnoticed.</p>
+      <p>The naive <code>MemoryStore</code> had a race: two reads of the file with a write between them could silently clobber an external edit. The fix reloads the target <strong>once</strong>, then runs both the drift check and the parse on that <strong>same snapshot</strong> — so an external write between operations can't be overwritten unnoticed. The <code>add()</code> path (<code>:414</code>) that calls <code>save_to_disk()</code> shows the real discipline: re-read from disk <strong>under a lock</strong> before mutating, reject exact duplicates, and refuse to write if the file read as empty (a transient blip that would otherwise wipe every prior memory):</p>
+      <pre class="src"><code>def add(self, target, content):
+    with self._file_lock(self._path_for(target)):
+        if self._reload_target(target, skip_drift=True) is _READ_FAILED:
+            return _read_failed_error(self._path_for(target))
+        ...
+        if content in entries:               # reject exact duplicate
+            return self._success_response(target, "Entry already exists.")
+        if new_total > limit:                # char-limit guard
+            return self._consolidation_failure({...})
+        entries.append(content)
+        self._set_entries(target, entries)
+        self.save_to_disk(target)            # durable write</code></pre>
 
       <figure class="diagram">
         <pre class="mermaid">
@@ -547,32 +563,6 @@ flowchart LR
         <li><strong>Concurrency fixed:</strong> the write path now reloads once and checks drift + parses on one snapshot, closing the clobber race.</li>
       </ul>
       <p style="color:var(--muted);font-size:14px;">This closes the 4-part series. Every <code>file:line</code> reference comes from the current <code>hermes-agent</code> source and can be used as a coordinate to read along.</p>''',
-    'code': '''      <h2>Source walkthrough: what save_to_disk() actually does</h2>
-      <p>The article cites <code>save_to_disk()</code> (<code>tools/memory_tool.py:387</code>) as "writes MEMORY.md straight to disk" — but that glosses over the important part. The method itself is tiny; the safety lives in <code>_write_file</code>, which uses an <strong>atomic temp-file + rename</strong> so concurrent readers never see a half-written file:</p>
-      <pre class="src"><code>def save_to_disk(self, target: str):
-    """Persist entries to the appropriate file. Called after every mutation."""
-    get_memory_dir().mkdir(parents=True, exist_ok=True)
-    self._write_file(self._path_for(target), self._entries_for(target))
-
-@staticmethod
-def _write_file(path: Path, entries: List[str]):
-    """Atomic temp-file + rename: readers see old OR new, never empty."""
-    content = ENTRY_DELIMITER.join(entries) if entries else ""
-    atomic_write_text(path, content, tmp_prefix=".mem_")</code></pre>
-      <p>And the <code>add()</code> path (<code>:414</code>) that calls it shows the real discipline: re-read from disk <strong>under a lock</strong> before mutating, reject exact duplicates, and refuse to write if the file read as empty (a transient blip that would otherwise wipe every prior memory):</p>
-      <pre class="src"><code>def add(self, target, content):
-    with self._file_lock(self._path_for(target)):
-        if self._reload_target(target, skip_drift=True) is _READ_FAILED:
-            return _read_failed_error(self._path_for(target))
-        ...
-        if content in entries:               # reject exact duplicate
-            return self._success_response(target, "Entry already exists.")
-        if new_total > limit:                # char-limit guard
-            return self._consolidation_failure({...})
-        entries.append(content)
-        self._set_entries(target, entries)
-        self.save_to_disk(target)            # durable write</code></pre>
-      <p>So "save_to_disk" is not a one-liner — it is the durable end of a path that locks, reloads, de-dupes, bounds by characters, and atomically swaps the file. That is the part the article's earlier summary skipped.</p>''',
   },
   'zh': {
     'title': '长期记忆：事实落盘，会话进 FTS5',
@@ -594,13 +584,36 @@ flowchart LR
     'body': '''      <p>这是第 4 / 4 篇（1 消息网关、2 WhatsApp、3 自我进化、4 长期记忆），基于 <code>hermes-agent</code> 的<strong>真实源码</strong>。记忆跑在两条独立的线上。</p>
 
       <h2>事实记忆</h2>
-      <p>事实经 <code>MemoryManager → MemoryProvider</code>——后台线程、串行、去噪。最朴素的实现 <code>MemoryStore</code>（<code>tools/memory_tool.py:159</code>）通过 <code>save_to_disk()</code>（<code>:387</code>）把 <code>MEMORY.md</code> 直接落盘。这就是耐久的"我对用户已知什么"的存储。</p>
+      <p>事实经 <code>MemoryManager → MemoryProvider</code>——后台线程、串行、去噪。最朴素的实现 <code>MemoryStore</code>（<code>tools/memory_tool.py:159</code>）通过 <code>save_to_disk()</code>（<code>:387</code>）把 <code>MEMORY.md</code> 直接落盘。方法本身很小；安全性在 <code>_write_file</code>：它用<strong>原子临时文件 + rename</strong>，并发读取者永远不会看到一个写一半的文件：</p>
+      <pre class="src"><code>def save_to_disk(self, target: str):
+    """Persist entries to the appropriate file. Called after every mutation."""
+    get_memory_dir().mkdir(parents=True, exist_ok=True)
+    self._write_file(self._path_for(target), self._entries_for(target))
+
+@staticmethod
+def _write_file(path: Path, entries: List[str]):
+    """Atomic temp-file + rename: readers see old OR new, never empty."""
+    content = ENTRY_DELIMITER.join(entries) if entries else ""
+    atomic_write_text(path, content, tmp_prefix=".mem_")</code></pre>
+      <p>这就是耐久的"我对用户已知什么"的存储。</p>
 
       <h2>会话记忆</h2>
       <p>另一条线是会话级的：<code>hermes_state.py</code> 用 FTS5 建全文索引，含 CJK 分词器 <code>messages_fts_cjk</code>（<code>:2685</code>）。这个索引是 <code>session_search</code> 的底座——能跨历史会话检索，而不只是单次会话内。</p>
 
       <h2>并发下的安全写入</h2>
-      <p>朴素的 <code>MemoryStore</code> 曾有一个竞态：两次读文件中间夹一次写，可能静默覆盖外部编辑。修复是<strong>只重读一次</strong>目标，然后在<strong>同一份快照</strong>上同时做 drift 检测与解析——这样两次操作之间的外部写入不会被无察觉地覆盖。</p>
+      <p>朴素的 <code>MemoryStore</code> 曾有一个竞态：两次读文件中间夹一次写，可能静默覆盖外部编辑。修复是<strong>只重读一次</strong>目标，然后在<strong>同一份快照</strong>上同时做 drift 检测与解析——这样两次操作之间的外部写入不会被无察觉地覆盖。调用 <code>save_to_disk()</code> 的 <code>add()</code> 路径（<code>:414</code>）才露出真纪律：改动前<strong>在锁内重读磁盘</strong>、拒绝完全重复、若文件读成空（瞬时抖动，否则会清空所有历史记忆）则拒绝写：</p>
+      <pre class="src"><code>def add(self, target, content):
+    with self._file_lock(self._path_for(target)):
+        if self._reload_target(target, skip_drift=True) is _READ_FAILED:
+            return _read_failed_error(self._path_for(target))
+        ...
+        if content in entries:               # 拒绝完全重复
+            return self._success_response(target, "Entry already exists.")
+        if new_total > limit:                # 字符上限护栏
+            return self._consolidation_failure({...})
+        entries.append(content)
+        self._set_entries(target, entries)
+        self.save_to_disk(target)            # 耐久写入</code></pre>
 
       <figure class="diagram">
         <pre class="mermaid">
@@ -624,32 +637,6 @@ flowchart LR
         <li><strong>修过并发：</strong>写入路径现在只重读一次、在同一快照上做 drift 检测与解析，堵住了被覆盖的竞态。</li>
       </ul>
       <p style="color:var(--muted);font-size:14px;">本系列到此结束。文中所有 <code>file:line</code> 引用均来自 <code>hermes-agent</code> 当前源码，可作对照阅读的坐标。</p>''',
-    'code': '''      <h2>源码走读：save_to_disk() 到底做了什么</h2>
-      <p>文章把 <code>save_to_disk()</code>（<code>tools/memory_tool.py:387</code>）说成"把 MEMORY.md 直接落盘"——但这略过了要害。方法本身很小；安全性在 <code>_write_file</code>：它用<strong>原子临时文件 + rename</strong>，并发读取者永远不会看到一个写一半的文件：</p>
-      <pre class="src"><code>def save_to_disk(self, target: str):
-    """Persist entries to the appropriate file. Called after every mutation."""
-    get_memory_dir().mkdir(parents=True, exist_ok=True)
-    self._write_file(self._path_for(target), self._entries_for(target))
-
-@staticmethod
-def _write_file(path: Path, entries: List[str]):
-    """Atomic temp-file + rename: readers see old OR new, never empty."""
-    content = ENTRY_DELIMITER.join(entries) if entries else ""
-    atomic_write_text(path, content, tmp_prefix=".mem_")</code></pre>
-      <p>调用它的 <code>add()</code> 路径（<code>:414</code>）才露出真纪律：改动前<strong>在锁内重读磁盘</strong>、拒绝完全重复、若文件读成空（瞬时抖动，否则会清空所有历史记忆）则拒绝写：</p>
-      <pre class="src"><code>def add(self, target, content):
-    with self._file_lock(self._path_for(target)):
-        if self._reload_target(target, skip_drift=True) is _READ_FAILED:
-            return _read_failed_error(self._path_for(target))
-        ...
-        if content in entries:               # 拒绝完全重复
-            return self._success_response(target, "Entry already exists.")
-        if new_total > limit:                # 字符上限护栏
-            return self._consolidation_failure({...})
-        entries.append(content)
-        self._set_entries(target, entries)
-        self.save_to_disk(target)            # 耐久写入</code></pre>
-      <p>所以"save_to_disk"不是一行代码——它是一条耐久路径的末端：加锁、重读、去重、按字符封顶、原子换文件。正是文章前一段省略掉的部分。</p>''',
   },
  },
 }
@@ -684,7 +671,6 @@ for slug, langs in CONTENT.items():
     {hero}
     <div data-od-id="body">
 {body}
-{code}
     </div>
     {author}
     {series}
@@ -695,7 +681,7 @@ for slug, langs in CONTENT.items():
 </html>
 """.format(langattr=langattr, lang=lang, title=c['title'], desc=c['desc'], fonts=FONTS, head=HEAD,
            style=STYLE, seriescss=SERIES_CSS, srccss=SRC_CSS, nav=NAV, eyebrow=c['eyebrow'], h1=c['h1'],
-           deck=c['deck'], byline=BYLINE, hero=c['hero'], body=c['body'], code=c.get('code', ''),
+           deck=c['deck'], byline=BYLINE, hero=c['hero'], body=c['body'],
            author=author, series=series(slug, lang), langswitch=lang_switch, zoom=ZOOM)
         fname = 'hermes-%s%s.html' % (slug, '' if lang == 'en' else '-zh')
         open(os.path.join(out_dir, fname), 'w', encoding='utf-8').write(html)

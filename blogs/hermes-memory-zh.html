@@ -242,13 +242,36 @@ flowchart LR
       <p>这是第 4 / 4 篇（1 消息网关、2 WhatsApp、3 自我进化、4 长期记忆），基于 <code>hermes-agent</code> 的<strong>真实源码</strong>。记忆跑在两条独立的线上。</p>
 
       <h2>事实记忆</h2>
-      <p>事实经 <code>MemoryManager → MemoryProvider</code>——后台线程、串行、去噪。最朴素的实现 <code>MemoryStore</code>（<code>tools/memory_tool.py:159</code>）通过 <code>save_to_disk()</code>（<code>:387</code>）把 <code>MEMORY.md</code> 直接落盘。这就是耐久的"我对用户已知什么"的存储。</p>
+      <p>事实经 <code>MemoryManager → MemoryProvider</code>——后台线程、串行、去噪。最朴素的实现 <code>MemoryStore</code>（<code>tools/memory_tool.py:159</code>）通过 <code>save_to_disk()</code>（<code>:387</code>）把 <code>MEMORY.md</code> 直接落盘。方法本身很小；安全性在 <code>_write_file</code>：它用<strong>原子临时文件 + rename</strong>，并发读取者永远不会看到一个写一半的文件：</p>
+      <pre class="src"><code>def save_to_disk(self, target: str):
+    """Persist entries to the appropriate file. Called after every mutation."""
+    get_memory_dir().mkdir(parents=True, exist_ok=True)
+    self._write_file(self._path_for(target), self._entries_for(target))
+
+@staticmethod
+def _write_file(path: Path, entries: List[str]):
+    """Atomic temp-file + rename: readers see old OR new, never empty."""
+    content = ENTRY_DELIMITER.join(entries) if entries else ""
+    atomic_write_text(path, content, tmp_prefix=".mem_")</code></pre>
+      <p>这就是耐久的"我对用户已知什么"的存储。</p>
 
       <h2>会话记忆</h2>
       <p>另一条线是会话级的：<code>hermes_state.py</code> 用 FTS5 建全文索引，含 CJK 分词器 <code>messages_fts_cjk</code>（<code>:2685</code>）。这个索引是 <code>session_search</code> 的底座——能跨历史会话检索，而不只是单次会话内。</p>
 
       <h2>并发下的安全写入</h2>
-      <p>朴素的 <code>MemoryStore</code> 曾有一个竞态：两次读文件中间夹一次写，可能静默覆盖外部编辑。修复是<strong>只重读一次</strong>目标，然后在<strong>同一份快照</strong>上同时做 drift 检测与解析——这样两次操作之间的外部写入不会被无察觉地覆盖。</p>
+      <p>朴素的 <code>MemoryStore</code> 曾有一个竞态：两次读文件中间夹一次写，可能静默覆盖外部编辑。修复是<strong>只重读一次</strong>目标，然后在<strong>同一份快照</strong>上同时做 drift 检测与解析——这样两次操作之间的外部写入不会被无察觉地覆盖。调用 <code>save_to_disk()</code> 的 <code>add()</code> 路径（<code>:414</code>）才露出真纪律：改动前<strong>在锁内重读磁盘</strong>、拒绝完全重复、若文件读成空（瞬时抖动，否则会清空所有历史记忆）则拒绝写：</p>
+      <pre class="src"><code>def add(self, target, content):
+    with self._file_lock(self._path_for(target)):
+        if self._reload_target(target, skip_drift=True) is _READ_FAILED:
+            return _read_failed_error(self._path_for(target))
+        ...
+        if content in entries:               # 拒绝完全重复
+            return self._success_response(target, "Entry already exists.")
+        if new_total > limit:                # 字符上限护栏
+            return self._consolidation_failure({...})
+        entries.append(content)
+        self._set_entries(target, entries)
+        self.save_to_disk(target)            # 耐久写入</code></pre>
 
       <figure class="diagram">
         <pre class="mermaid">
@@ -272,32 +295,6 @@ flowchart LR
         <li><strong>修过并发：</strong>写入路径现在只重读一次、在同一快照上做 drift 检测与解析，堵住了被覆盖的竞态。</li>
       </ul>
       <p style="color:var(--muted);font-size:14px;">本系列到此结束。文中所有 <code>file:line</code> 引用均来自 <code>hermes-agent</code> 当前源码，可作对照阅读的坐标。</p>
-      <h2>源码走读：save_to_disk() 到底做了什么</h2>
-      <p>文章把 <code>save_to_disk()</code>（<code>tools/memory_tool.py:387</code>）说成"把 MEMORY.md 直接落盘"——但这略过了要害。方法本身很小；安全性在 <code>_write_file</code>：它用<strong>原子临时文件 + rename</strong>，并发读取者永远不会看到一个写一半的文件：</p>
-      <pre class="src"><code>def save_to_disk(self, target: str):
-    """Persist entries to the appropriate file. Called after every mutation."""
-    get_memory_dir().mkdir(parents=True, exist_ok=True)
-    self._write_file(self._path_for(target), self._entries_for(target))
-
-@staticmethod
-def _write_file(path: Path, entries: List[str]):
-    """Atomic temp-file + rename: readers see old OR new, never empty."""
-    content = ENTRY_DELIMITER.join(entries) if entries else ""
-    atomic_write_text(path, content, tmp_prefix=".mem_")</code></pre>
-      <p>调用它的 <code>add()</code> 路径（<code>:414</code>）才露出真纪律：改动前<strong>在锁内重读磁盘</strong>、拒绝完全重复、若文件读成空（瞬时抖动，否则会清空所有历史记忆）则拒绝写：</p>
-      <pre class="src"><code>def add(self, target, content):
-    with self._file_lock(self._path_for(target)):
-        if self._reload_target(target, skip_drift=True) is _READ_FAILED:
-            return _read_failed_error(self._path_for(target))
-        ...
-        if content in entries:               # 拒绝完全重复
-            return self._success_response(target, "Entry already exists.")
-        if new_total > limit:                # 字符上限护栏
-            return self._consolidation_failure({...})
-        entries.append(content)
-        self._set_entries(target, entries)
-        self.save_to_disk(target)            # 耐久写入</code></pre>
-      <p>所以"save_to_disk"不是一行代码——它是一条耐久路径的末端：加锁、重读、去重、按字符封顶、原子换文件。正是文章前一段省略掉的部分。</p>
     </div>
         <div class="author">
       <div class="avatar">DL</div>

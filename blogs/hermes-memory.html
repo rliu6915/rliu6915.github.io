@@ -242,13 +242,36 @@ flowchart LR
       <p>This is part 4 of 4 (1: Message Gateway, 2: WhatsApp, 3: Self-Improving, 4: Long-Term Memory), based on the <strong>real source</strong> of <code>hermes-agent</code>. Memory runs on two independent tracks.</p>
 
       <h2>Fact memory</h2>
-      <p>Facts flow through <code>MemoryManager → MemoryProvider</code> — a background thread, serial, de-noised. The simplest implementation, <code>MemoryStore</code> (<code>tools/memory_tool.py:159</code>), writes <code>MEMORY.md</code> straight to disk via <code>save_to_disk()</code> (<code>:387</code>). This is the durable "what I know about the user" store.</p>
+      <p>Facts flow through <code>MemoryManager → MemoryProvider</code> — a background thread, serial, de-noised. The simplest implementation, <code>MemoryStore</code> (<code>tools/memory_tool.py:159</code>), writes <code>MEMORY.md</code> straight to disk via <code>save_to_disk()</code> (<code>:387</code>). The method itself is tiny; the safety lives in <code>_write_file</code>, which uses an <strong>atomic temp-file + rename</strong> so concurrent readers never see a half-written file:</p>
+      <pre class="src"><code>def save_to_disk(self, target: str):
+    """Persist entries to the appropriate file. Called after every mutation."""
+    get_memory_dir().mkdir(parents=True, exist_ok=True)
+    self._write_file(self._path_for(target), self._entries_for(target))
+
+@staticmethod
+def _write_file(path: Path, entries: List[str]):
+    """Atomic temp-file + rename: readers see old OR new, never empty."""
+    content = ENTRY_DELIMITER.join(entries) if entries else ""
+    atomic_write_text(path, content, tmp_prefix=".mem_")</code></pre>
+      <p>This is the durable "what I know about the user" store.</p>
 
       <h2>Session memory</h2>
       <p>The other track is conversational: <code>hermes_state.py</code> builds a full-text index with FTS5, including a CJK tokenizer <code>messages_fts_cjk</code> (<code>:2685</code>). That index is the foundation behind <code>session_search</code> — the ability to retrieve across past sessions, not just within one.</p>
 
       <h2>Writing safely under concurrency</h2>
-      <p>The naive <code>MemoryStore</code> had a race: two reads of the file with a write between them could silently clobber an external edit. The fix reloads the target <strong>once</strong>, then runs both the drift check and the parse on that <strong>same snapshot</strong> — so an external write between operations can't be overwritten unnoticed.</p>
+      <p>The naive <code>MemoryStore</code> had a race: two reads of the file with a write between them could silently clobber an external edit. The fix reloads the target <strong>once</strong>, then runs both the drift check and the parse on that <strong>same snapshot</strong> — so an external write between operations can't be overwritten unnoticed. The <code>add()</code> path (<code>:414</code>) that calls <code>save_to_disk()</code> shows the real discipline: re-read from disk <strong>under a lock</strong> before mutating, reject exact duplicates, and refuse to write if the file read as empty (a transient blip that would otherwise wipe every prior memory):</p>
+      <pre class="src"><code>def add(self, target, content):
+    with self._file_lock(self._path_for(target)):
+        if self._reload_target(target, skip_drift=True) is _READ_FAILED:
+            return _read_failed_error(self._path_for(target))
+        ...
+        if content in entries:               # reject exact duplicate
+            return self._success_response(target, "Entry already exists.")
+        if new_total > limit:                # char-limit guard
+            return self._consolidation_failure({...})
+        entries.append(content)
+        self._set_entries(target, entries)
+        self.save_to_disk(target)            # durable write</code></pre>
 
       <figure class="diagram">
         <pre class="mermaid">
@@ -272,32 +295,6 @@ flowchart LR
         <li><strong>Concurrency fixed:</strong> the write path now reloads once and checks drift + parses on one snapshot, closing the clobber race.</li>
       </ul>
       <p style="color:var(--muted);font-size:14px;">This closes the 4-part series. Every <code>file:line</code> reference comes from the current <code>hermes-agent</code> source and can be used as a coordinate to read along.</p>
-      <h2>Source walkthrough: what save_to_disk() actually does</h2>
-      <p>The article cites <code>save_to_disk()</code> (<code>tools/memory_tool.py:387</code>) as "writes MEMORY.md straight to disk" — but that glosses over the important part. The method itself is tiny; the safety lives in <code>_write_file</code>, which uses an <strong>atomic temp-file + rename</strong> so concurrent readers never see a half-written file:</p>
-      <pre class="src"><code>def save_to_disk(self, target: str):
-    """Persist entries to the appropriate file. Called after every mutation."""
-    get_memory_dir().mkdir(parents=True, exist_ok=True)
-    self._write_file(self._path_for(target), self._entries_for(target))
-
-@staticmethod
-def _write_file(path: Path, entries: List[str]):
-    """Atomic temp-file + rename: readers see old OR new, never empty."""
-    content = ENTRY_DELIMITER.join(entries) if entries else ""
-    atomic_write_text(path, content, tmp_prefix=".mem_")</code></pre>
-      <p>And the <code>add()</code> path (<code>:414</code>) that calls it shows the real discipline: re-read from disk <strong>under a lock</strong> before mutating, reject exact duplicates, and refuse to write if the file read as empty (a transient blip that would otherwise wipe every prior memory):</p>
-      <pre class="src"><code>def add(self, target, content):
-    with self._file_lock(self._path_for(target)):
-        if self._reload_target(target, skip_drift=True) is _READ_FAILED:
-            return _read_failed_error(self._path_for(target))
-        ...
-        if content in entries:               # reject exact duplicate
-            return self._success_response(target, "Entry already exists.")
-        if new_total > limit:                # char-limit guard
-            return self._consolidation_failure({...})
-        entries.append(content)
-        self._set_entries(target, entries)
-        self.save_to_disk(target)            # durable write</code></pre>
-      <p>So "save_to_disk" is not a one-liner — it is the durable end of a path that locks, reloads, de-dupes, bounds by characters, and atomically swaps the file. That is the part the article's earlier summary skipped.</p>
     </div>
         <div class="author">
       <div class="avatar">DL</div>

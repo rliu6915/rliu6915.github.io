@@ -243,7 +243,19 @@ flowchart LR
       <p>This is part 2 of a 4-part series (1: Message Gateway, 2: WhatsApp, 3: Self-Improving, 4: Long-Term Memory), based on the <strong>real source</strong> of <code>hermes-agent</code>. Here we go one level down into a concrete adapter: WhatsApp, which rides Meta's <strong>Cloud API</strong>.</p>
 
       <h2>The Cloud API shape</h2>
-      <p>WhatsApp uses a webhook to <em>receive</em> messages and the Graph API to <em>send</em> them. <code>WhatsAppCloudAdapter.connect()</code> (<code>gateway/platforms/whatsapp_cloud.py:435</code>) registers the webhook verification handshake and the inbound message callback. Once verified, every user message arrives as a webhook POST, gets normalized into a <code>MessageEvent</code>, and flows into the GatewayRunner we covered in part 1.</p>
+      <p>WhatsApp uses a webhook to <em>receive</em> messages and the Graph API to <em>send</em> them. <code>WhatsAppCloudAdapter.connect()</code> (<code>gateway/platforms/whatsapp_cloud.py:435</code>) registers the webhook verification handshake and the inbound message callback. Once verified, every user message arrives as a webhook POST, gets normalized into a <code>MessageEvent</code>, and flows into the GatewayRunner we covered in part 1. For real, the method first <strong>refuses to start</strong> if deps or config are missing, then builds the two transports — an inbound webhook server and an outbound <code>httpx</code> client:</p>
+      <pre class="src"><code>async def connect(self, *, is_reconnect: bool = False) -> bool:
+    if not check_whatsapp_cloud_requirements():
+        self._set_fatal_error("whatsapp_cloud_deps_missing", ...)
+        return False
+    if not self._phone_number_id or not self._access_token:
+        self._set_fatal_error("whatsapp_cloud_unconfigured", ...)
+        return False
+    # Outbound HTTP client with tight keepalive.
+    self._http_client = httpx.AsyncClient(
+        timeout=30.0, limits=platform_httpx_limits())
+    # Inbound webhook server next ...</code></pre>
+      <p>Note the two <strong>fail-closed</strong> guards up front: a missing dependency or an unconfigured phone number id / token stops the adapter before it can half-start. That discipline is what keeps a misconfigured bot from silently eating webhooks.</p>
 
       <h2>Retry-resistance</h2>
       <p>Meta's webhook <strong>redelivers</strong> — a message can arrive two or three times. The adapter guards with <code>_dedup_wamid</code>, keyed on the platform's message id, so one message never triggers two replies. Without it, every flaky delivery would double your agent's answer (and its cost).</p>
@@ -275,20 +287,6 @@ flowchart TD
         <li><strong>Failure containment:</strong> a failed <code>send()</code> logs and moves on — one bad message never kills the loop.</li>
         <li><strong>Mention gating:</strong> only @-mentions get a reply in groups, keeping it a helper, not a spammer.</li>
       </ul>
-      <h2>Source walkthrough: what connect() actually sets up</h2>
-      <p>The article names <code>WhatsAppCloudAdapter.connect()</code> (<code>gateway/platforms/whatsapp_cloud.py:435</code>) as the wiring point. For real, it first <strong>refuses to start</strong> if deps or config are missing, then builds the two transports — an inbound webhook server and an outbound <code>httpx</code> client:</p>
-      <pre class="src"><code>async def connect(self, *, is_reconnect: bool = False) -> bool:
-    if not check_whatsapp_cloud_requirements():
-        self._set_fatal_error("whatsapp_cloud_deps_missing", ...)
-        return False
-    if not self._phone_number_id or not self._access_token:
-        self._set_fatal_error("whatsapp_cloud_unconfigured", ...)
-        return False
-    # Outbound HTTP client with tight keepalive.
-    self._http_client = httpx.AsyncClient(
-        timeout=30.0, limits=platform_httpx_limits())
-    # Inbound webhook server next ...</code></pre>
-      <p>Note the two <strong>fail-closed</strong> guards up front: a missing dependency or an unconfigured phone number id / token stops the adapter before it can half-start. That discipline is what keeps a misconfigured bot from silently eating webhooks.</p>
     </div>
         <div class="author">
       <div class="avatar">DL</div>
