@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-import io, os
+import io, os, re
 
 STYLE = open('/tmp/_style.css', encoding='utf-8').read()
 HEAD  = open('/tmp/_head_script.html', encoding='utf-8').read()
@@ -18,8 +18,19 @@ SERIES_CSS = """
 """
 
 SRC_CSS = """
-    pre.src { background: #0e1117; border: 1px solid var(--border); border-radius: 10px;
-      padding: 18px 20px; overflow-x: auto; margin: 22px 0; }
+    .src-wrap { margin: 22px 0; }
+    .src-bar { display: flex; justify-content: space-between; align-items: center;
+      background: #161b22; border: 1px solid var(--border); border-bottom: none;
+      border-radius: 10px 10px 0 0; padding: 7px 14px; }
+    .src-lang { font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 12px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+    .src-copy { font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 12px; color: var(--muted); background: transparent;
+      border: 1px solid var(--border); border-radius: 6px; padding: 3px 11px;
+      cursor: pointer; transition: color .15s, border-color .15s; }
+    .src-copy:hover { color: var(--accent); border-color: var(--accent); }
+    pre.src { background: #0e1117; border: 1px solid var(--border); border-radius: 0 0 10px 10px;
+      padding: 18px 20px; overflow-x: auto; margin: 0; }
     pre.src code { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
       font-size: 13px; line-height: 1.7; color: #d7dde8; white-space: pre; }
 """
@@ -645,6 +656,9 @@ out_dir = 'blogs'
 for slug, langs in CONTENT.items():
     for lang in ('en', 'zh'):
         c = langs[lang]
+        # strip the leading "part N of 4-part series" intro paragraph
+        c = dict(c)
+        c['body'] = re.sub(r"^\s*<p>.*?</p>\s*\n", "", c['body'], flags=re.S)
         other = 'hermes-%s-zh.html' % slug if lang == 'en' else 'hermes-%s.html' % slug
         lang_switch = ('Prefer 中文? <a href="%s">Read this article in 中文 &rarr;</a>' % other) if lang == 'en' \
                       else ('Read in English? <a href="%s">Read this article in English &rarr;</a>' % other)
@@ -673,16 +687,50 @@ for slug, langs in CONTENT.items():
 {body}
     </div>
     {author}
-    {series}
     <p class="lang-switch">{langswitch}</p>
   </article>
   {zoom}
+  <script>
+    document.querySelectorAll('pre.src').forEach(function (pre) {
+      var wrap = document.createElement('div');
+      wrap.className = 'src-wrap';
+      pre.parentNode.insertBefore(wrap, pre);
+      wrap.appendChild(pre);
+      var bar = document.createElement('div');
+      bar.className = 'src-bar';
+      var lang = document.createElement('span');
+      lang.className = 'src-lang';
+      lang.textContent = 'Python';
+      var btn = document.createElement('button');
+      btn.className = 'src-copy';
+      btn.type = 'button';
+      btn.textContent = '复制';
+      btn.addEventListener('click', function () {
+        var t = pre.innerText;
+        var done = function () { btn.textContent = '已复制'; setTimeout(function () { btn.textContent = '复制'; }, 1500); };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(t).then(done, function () { fallbackCopy(t, btn); });
+        } else { fallbackCopy(t, btn); }
+      });
+      bar.appendChild(lang);
+      bar.appendChild(btn);
+      wrap.insertBefore(bar, pre);
+    });
+    function fallbackCopy(text, btn) {
+      var ta = document.createElement('textarea');
+      ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); btn.textContent = '已复制'; } catch (e) {}
+      document.body.removeChild(ta);
+      setTimeout(function () { btn.textContent = '复制'; }, 1500);
+    }
+  </script>
 </body>
 </html>
 """.format(langattr=langattr, lang=lang, title=c['title'], desc=c['desc'], fonts=FONTS, head=HEAD,
            style=STYLE, seriescss=SERIES_CSS, srccss=SRC_CSS, nav=NAV, eyebrow=c['eyebrow'], h1=c['h1'],
            deck=c['deck'], byline=BYLINE, hero=c['hero'], body=c['body'],
-           author=author, series=series(slug, lang), langswitch=lang_switch, zoom=ZOOM)
+           author=author, langswitch=lang_switch, zoom=ZOOM)
         fname = 'hermes-%s%s.html' % (slug, '' if lang == 'en' else '-zh')
         open(os.path.join(out_dir, fname), 'w', encoding='utf-8').write(html)
         print('wrote', fname, len(html), 'bytes')
