@@ -261,8 +261,8 @@ flowchart LR
     </figure>
     <div data-od-id="body">
       <h2>The entry contract</h2>
-      <p>Every platform adapter — Telegram, Discord, Slack, WhatsApp, Signal, and the rest — extends <code>BasePlatformAdapter.handle_message(event)</code> (<code>gateway/platforms/base.py:6045</code>). The adapter's only job is to <strong>normalize</strong> the platform's raw message into a <code>MessageEvent</code> and hand it to <code>GatewayRunner._handle_message</code> (<code>gateway/run.py:16462</code>). That normalization is the seam: the agent never sees a Telegram update vs. a WhatsApp webhook — it only ever sees a <code>MessageEvent</code>.</p>
-      <p>Here is the method for real. Note it <strong>returns immediately</strong>: the actual work is spawned as a background task, so a new message can interrupt a running agent instead of being queued behind it (<code>gateway/platforms/base.py:6045</code>):</p>
+      <p>Every platform adapter — Telegram, Discord, Slack, WhatsApp, Signal — extends <code>BasePlatformAdapter.handle_message(event)</code> (<code>gateway/platforms/base.py:6045</code>). Its only job is to <strong>normalize</strong> a platform's raw message into a <code>MessageEvent</code> and hand it to <code>GatewayRunner._handle_message</code> (<code>gateway/run.py:16462</code>). That normalization is the seam: the agent never sees "Telegram update" vs "WhatsApp webhook" — it only ever sees a <code>MessageEvent</code>.</p>
+      <p>The method (excerpt) returns <strong>immediately</strong>: the real work is spawned as a background task, so a new message can interrupt a running agent instead of queuing behind it (<code>gateway/platforms/base.py:6045</code>):</p>
       <pre class="src"><code>async def handle_message(self, event: MessageEvent) -> None:
     """Process an incoming message. Returns quickly by spawning
     background tasks, so new messages can be processed even while an
@@ -271,15 +271,16 @@ flowchart LR
         return
     if event.allow_gateway_control:
         coerce_plaintext_gateway_command(event)
-    # ... Telegram topic recovery, then build the session_key ...
+    # Telegram topic recovery (DM lanes only), then derive the key
     session_key = build_session_key(event.source, ...)
+    # ...then _process_message_background() spawns the turn off the caller
     # route into GatewayRunner._handle_message(event, session_key, ...)</code></pre>
-      <p>The line that matters is <code>build_session_key(event.source, ...)</code>: the same platform + chat always yields the same key, which is exactly what the next layer routes on. The adapter hands off here; everything after belongs to the Gateway.</p>
+      <p>Two details the excerpt hides. First, <code>build_session_key(event.source, ...)</code> doesn't just hash the chat id — it folds in <code>group_sessions_per_user</code> and <code>thread_sessions_per_user</code>, so a group can scope sessions per-user and a thread can be its own session. Same platform + chat + scope always yields the same key, which is exactly what the next layer routes on. Second, the spawn is what makes interruption real: because the turn runs in a background task, an incoming <code>/stop</code> or <code>/new</code> bypasses the active-session guard and is dispatched inline, rather than leaking into the transcript or deadlocking on a lock.</p>
 
       <h2>Two layers inside GatewayRunner</h2>
-      <p>Inside, GatewayRunner splits into a <strong>session-routing layer</strong> (resolve or create a session by <code>session_key</code>, take an active-session lock, run the tool-approval flow) and the <strong>TurnRunner</strong> (<code>gateway/run.py:5348</code>), which actually runs one agent loop, streams output, and feeds tool results back. This split is what keeps "platform protocol complexity" and "agent core logic" from contaminating each other.</p>
+      <p>GatewayRunner splits into a <strong>session-routing layer</strong> — resolve or create a session by <code>session_key</code>, take an active-session lock, run the tool-approval flow — and the <strong>TurnRunner</strong> (<code>gateway/run.py:4291</code>), which runs one agent loop, streams output, and feeds tool results back. Note the coordinate: <code>TurnRunner</code> <em>the class</em> lives at <code>:4291</code>; <code>:5348</code> is one of its methods (<code>run_sync</code>). This split keeps "platform protocol complexity" and "agent core logic" from contaminating each other.</p>
 
-      <blockquote class="inline">Design intuition: the Gateway isn't the agent's "frontend" — it's the agent's "post office." It only delivers the letter (MessageEvent) correctly and sends the reply (final_response) correctly. It never thinks for the agent.</blockquote>
+      <blockquote class="inline">Design intuition: the Gateway isn't the agent's "frontend" — it's the agent's "post office." It delivers the letter (MessageEvent) and sends the reply (final_response). It never thinks for the agent.</blockquote>
 
       <figure class="diagram">
         <pre class="mermaid">
@@ -291,7 +292,7 @@ flowchart TD
   S -->|yes| L["acquire active-session lock"]
   S -->|no| C["create session"]
   C --> L
-  L --> T["TurnRunner (run.py:5348)"]
+  L --> T["TurnRunner (run.py:4291)"]
   T --> AG["AIAgent loop"]
   AG --> F["final_response"]
   F --> H
@@ -301,12 +302,12 @@ flowchart TD
       </figure>
 
       <h2>Why this layering matters</h2>
-      <p>The key constraint (from <code>AGENTS.md</code>) is that <strong>per-conversation prompt caching is sacred</strong>: every turn reuses a cached prefix, and any change to the system prompt or tool schema mid-conversation invalidates that cache and doubles cost. Because the Gateway owns session/scoping while the agent stays a pure "one conversation loop," the same agent instance can be reused per session without ever mutating its context — caching survives across platforms.</p>
+      <p>The key constraint (from <code>AGENTS.md</code>) is that <strong>per-conversation prompt caching is sacred</strong>: every turn reuses a cached prefix, and any change to the system prompt or tool schema mid-conversation invalidates that cache and doubles cost. Because the Gateway owns session/scoping while the agent stays a pure "one conversation loop," the same agent instance is reused per session without ever mutating its context — caching survives across platforms. There's even a self-heal: if the adapter holds a stale lock for a session whose owner task already exited (split-brain, issue #11016), it clears the lock and falls through to normal dispatch, so the user isn't trapped behind a dead guard.</p>
 
       <h2>Takeaways</h2>
       <ul>
         <li><strong>One contract, many platforms:</strong> <code>BasePlatformAdapter.handle_message</code> is the only seam; adapters normalize, the agent stays platform-blind.</li>
-        <li><strong>Two internal layers:</strong> session routing (resolve/lock/approve) vs. TurnRunner (run the loop) — protocol complexity never reaches the agent core.</li>
+        <li><strong>Two internal layers:</strong> session routing (resolve/lock/approve) vs. TurnRunner (run the loop) — protocol complexity never reaches the agent core. <code>TurnRunner</code> is at <code>run.py:4291</code>.</li>
         <li><strong>Caching is the reason:</strong> a pure "one conversation loop" agent is what lets prompt caching stay intact across 20+ platforms.</li>
       </ul>
     </div>

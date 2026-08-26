@@ -261,8 +261,8 @@ flowchart LR
     </figure>
     <div data-od-id="body">
       <h2>入口契约</h2>
-      <p>每个平台适配器——Telegram、Discord、Slack、WhatsApp、Signal 等——都继承 <code>BasePlatformAdapter.handle_message(event)</code>（<code>gateway/platforms/base.py:6045</code>）。适配器的唯一职责是把平台原始消息<strong>归一化</strong>成 <code>MessageEvent</code>，交给 <code>GatewayRunner._handle_message</code>（<code>gateway/run.py:16462</code>）。这条归一化就是接缝：agent 从来看不到"Telegram 更新 vs WhatsApp webhook"的区别，它只看到 <code>MessageEvent</code>。</p>
-      <p>方法本身长这样（<code>gateway/platforms/base.py:6045</code>）。注意它<strong>立刻 return</strong>：真正的处理被 spawn 成后台任务，好让消息能一边跑 agent 一边被新消息打断，而不是排在后面：</p>
+      <p>每个平台适配器——Telegram、Discord、Slack、WhatsApp、Signal 等——都继承 <code>BasePlatformAdapter.handle_message(event)</code>（<code>gateway/platforms/base.py:6045</code>）。它的唯一职责是把平台原始消息<strong>归一化</strong>成 <code>MessageEvent</code>，交给 <code>GatewayRunner._handle_message</code>（<code>gateway/run.py:16462</code>）。这条归一化就是接缝：agent 从来看不到"Telegram 更新 vs WhatsApp webhook"的区别，它只看到 <code>MessageEvent</code>。</p>
+      <p>方法（节选）<strong>立刻 return</strong>：真正的处理被 spawn 成后台任务，好让消息能一边跑 agent 一边被新消息打断，而不是排在后面（<code>gateway/platforms/base.py:6045</code>）：</p>
       <pre class="src"><code>async def handle_message(self, event: MessageEvent) -> None:
     """Process an incoming message. Returns quickly by spawning
     background tasks, so new messages can be processed even while an
@@ -271,13 +271,14 @@ flowchart LR
         return
     if event.allow_gateway_control:
         coerce_plaintext_gateway_command(event)
-    # ... Telegram topic recovery, then build the session_key ...
+    # Telegram topic recovery（仅 DM 会话），然后派生 key
     session_key = build_session_key(event.source, ...)
+    # ...随后 _process_message_background() 把这一轮脱离调用方 spawn 出去
     # route into GatewayRunner._handle_message(event, session_key, ...)</code></pre>
-      <p>关键在 <code>build_session_key(event.source, ...)</code>：同一平台同一会话永远算出同一个 key，这正是下一层"按会话路由"的依据。适配器到此交权，后面全归 Gateway。</p>
+      <p>节选里藏着两个细节。其一，<code>build_session_key(event.source, ...)</code> 不只是对 chat id 做哈希——它还会并入 <code>group_sessions_per_user</code> 与 <code>thread_sessions_per_user</code>，于是群里可以按用户隔离会话、线程可以各自成会话。同一平台 + 同一会话 + 同一作用域永远算出同一个 key，这正是下一层"按会话路由"的依据。其二，spawn 才是"可打断"的真正来源：因为这一轮跑在后台任务里，新来的 <code>/stop</code> 或 <code>/new</code> 会绕过活跃会话锁、被内联派发，而不是漏进对话正文、也不会卡死在锁上。</p>
 
       <h2>GatewayRunner 内部的两层</h2>
-      <p>内部，GatewayRunner 分成<strong>会话路由层</strong>（按 <code>session_key</code> 找/建会话、取活跃会话锁、跑工具审批流）和 <strong>TurnRunner</strong>（<code>gateway/run.py:5348</code>，真正跑一轮 agent 循环、流式输出、把 tool 结果喂回去）。这套切分让"平台协议复杂度"和"agent 核心逻辑"互不污染。</p>
+      <p>GatewayRunner 分成<strong>会话路由层</strong>——按 <code>session_key</code> 找/建会话、取活跃会话锁、跑工具审批流——和 <strong>TurnRunner</strong>（<code>gateway/run.py:4291</code>，真正跑一轮 agent 循环、流式输出、把 tool 结果喂回去）。注意坐标：<code>TurnRunner</code> <em>类</em> 在 <code>:4291</code>；<code>:5348</code> 是它的一个方法（<code>run_sync</code>）。这套切分让"平台协议复杂度"和"agent 核心逻辑"互不污染。</p>
 
       <blockquote class="inline">设计直觉：Gateway 不是 agent 的"前端"，而是 agent 的"邮局"——它只负责把信（MessageEvent）正确投递、把回信（final_response）正确发出，绝不替 agent 思考。</blockquote>
 
@@ -291,7 +292,7 @@ flowchart TD
   S -->|yes| L["acquire active-session lock"]
   S -->|no| C["create session"]
   C --> L
-  L --> T["TurnRunner (run.py:5348)"]
+  L --> T["TurnRunner (run.py:4291)"]
   T --> AG["AIAgent loop"]
   AG --> F["final_response"]
   F --> H
@@ -301,12 +302,12 @@ flowchart TD
       </figure>
 
       <h2>为什么这个分层重要</h2>
-      <p>关键约束（来自 <code>AGENTS.md</code>）是 <strong>Per-conversation prompt caching is sacred</strong>：每轮对话复用缓存前缀，任何中途改动 system prompt 或 tool schema 都会让缓存失效、成本翻倍。因为 Gateway 管会话/作用域、agent 保持"纯一次对话循环"，同一个 agent 实例得以按会话复用而不改其上下文——缓存在 20+ 平台间都保得住。</p>
+      <p>关键约束（来自 <code>AGENTS.md</code>）是 <strong>Per-conversation prompt caching is sacred</strong>：每轮对话复用缓存前缀，任何中途改动 system prompt 或 tool schema 都会让缓存失效、成本翻倍。因为 Gateway 管会话/作用域、agent 保持"纯一次对话循环"，同一个 agent 实例得以按会话复用而不改其上下文——缓存在 20+ 平台间都保得住。甚至还有自愈：若适配器持有一个会话的过期锁、而它的宿主任务早已退出（split-brain，issue #11016），它会清掉这把锁、落到常规派发，用户就不会卡在一把死锁后面。</p>
 
       <h2>小结</h2>
       <ul>
         <li><strong>一个契约，多平台：</strong><code>BasePlatformAdapter.handle_message</code> 是唯一的接缝；适配器归一化，agent 对平台无感。</li>
-        <li><strong>内部两层：</strong>会话路由（解析/加锁/审批）与 TurnRunner（跑循环）——协议复杂度永不触及 agent 核心。</li>
+        <li><strong>内部两层：</strong>会话路由（解析/加锁/审批）与 TurnRunner（跑循环）——协议复杂度永不触及 agent 核心。<code>TurnRunner</code> 在 <code>run.py:4291</code>。</li>
         <li><strong>分层是为了缓存：</strong>"纯一次对话循环"的 agent，才让 prompt caching 在 20+ 平台间不被破坏。</li>
       </ul>
     </div>
