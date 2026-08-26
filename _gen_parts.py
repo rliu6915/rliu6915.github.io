@@ -727,10 +727,16 @@ for slug, langs in CONTENT.items():
   </script>
 </body>
 </html>
-""".format(langattr=langattr, lang=lang, title=c['title'], desc=c['desc'], fonts=FONTS, head=HEAD,
-           style=STYLE, seriescss=SERIES_CSS, srccss=SRC_CSS, nav=NAV, eyebrow=c['eyebrow'], h1=c['h1'],
-           deck=c['deck'], byline=BYLINE, hero=c['hero'], body=c['body'],
-           author=author, langswitch=lang_switch, zoom=ZOOM)
+"""
+        repl = {
+            '{langattr}': langattr, '{lang}': lang, '{title}': c['title'], '{desc}': c['desc'],
+            '{fonts}': FONTS, '{head}': HEAD, '{style}': STYLE, '{seriescss}': SERIES_CSS,
+            '{srccss}': SRC_CSS, '{nav}': NAV, '{eyebrow}': c['eyebrow'], '{h1}': c['h1'],
+            '{deck}': c['deck'], '{byline}': BYLINE, '{hero}': c['hero'], '{body}': c['body'],
+            '{author}': author, '{langswitch}': lang_switch, '{zoom}': ZOOM,
+        }
+        for k, v in repl.items():
+            html = html.replace(k, v)
         fname = 'hermes-%s%s.html' % (slug, '' if lang == 'en' else '-zh')
         open(os.path.join(out_dir, fname), 'w', encoding='utf-8').write(html)
         print('wrote', fname, len(html), 'bytes')
