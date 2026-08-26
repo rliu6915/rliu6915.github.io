@@ -8,6 +8,7 @@
   <link href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,600,600i,700,700i|Raleway:300,300i,400,400i,500,500i,600,600i,700,700i|Poppins:300,300i,400,400i,500,500i,600,600i,700,700i" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
   <script>document.addEventListener("DOMContentLoaded", function(){ if(window.mermaid){ mermaid.initialize({startOnLoad:true, theme:"dark", themeVariables:{fontSize:"15px"}}); } });</script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
   <style>
     :root {
       --bg: #010e1b;
@@ -220,6 +221,14 @@
       padding: 18px 20px; overflow-x: auto; margin: 0; }
     pre.src code { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
       font-size: 13px; line-height: 1.7; color: #d7dde8; white-space: pre; }
+    /* highlight.js token colors tuned to the block's dark theme */
+    pre.src code.hljs { background: transparent; padding: 0; }
+    pre.src .hljs-keyword, pre.src .hljs-built_in { color: #ff7b72; }
+    pre.src .hljs-string, pre.src .hljs-comment { color: #a5d6ff; }
+    pre.src .hljs-comment { font-style: italic; opacity: .8; }
+    pre.src .hljs-title, pre.src .hljs-title.function_, pre.src .hljs-function .hljs-title { color: #d2a8ff; }
+    pre.src .hljs-number, pre.src .hljs-type { color: #79c0ff; }
+    pre.src .hljs-attr, pre.src .hljs-params { color: #e3b341; }
 </style>
 </head>
 <body>
@@ -320,40 +329,50 @@ flowchart TD
     zoomOverlay.addEventListener('click', function(){ this.classList.remove('open'); this.innerHTML=''; });
     document.addEventListener('keydown', function(e){ if(e.key==='Escape'){ zoomOverlay.classList.remove('open'); zoomOverlay.innerHTML=''; } });
   </script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>document.addEventListener('DOMContentLoaded', function () { if (window.hljs) hljs.highlightAll(); });</script>
   <script>
-    document.querySelectorAll('pre.src').forEach(function (pre) {
-      var wrap = document.createElement('div');
-      wrap.className = 'src-wrap';
-      pre.parentNode.insertBefore(wrap, pre);
-      wrap.appendChild(pre);
-      var bar = document.createElement('div');
-      bar.className = 'src-bar';
-      var lang = document.createElement('span');
-      lang.className = 'src-lang';
-      lang.textContent = 'Python';
-      var btn = document.createElement('button');
-      btn.className = 'src-copy';
-      btn.type = 'button';
-      btn.textContent = '复制';
-      btn.addEventListener('click', function () {
-        var t = pre.innerText;
-        var done = function () { btn.textContent = '已复制'; setTimeout(function () { btn.textContent = '复制'; }, 1500); };
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(t).then(done, function () { fallbackCopy(t, btn); });
-        } else { fallbackCopy(t, btn); }
+    (function () {
+      var isZh = document.documentElement.lang === 'zh-CN';
+      var COPY = isZh ? '复制' : 'Copy';
+      var COPIED = isZh ? '已复制' : 'Copied';
+      document.querySelectorAll('pre.src').forEach(function (pre) {
+        var code = pre.querySelector('code');
+        if (code && !/language-/.test(code.className)) code.className = 'language-python';
+        if (window.hljs && code) { try { window.hljs.highlightElement(code); } catch (e) {} }
+        var wrap = document.createElement('div');
+        wrap.className = 'src-wrap';
+        pre.parentNode.insertBefore(wrap, pre);
+        wrap.appendChild(pre);
+        var bar = document.createElement('div');
+        bar.className = 'src-bar';
+        var lang = document.createElement('span');
+        lang.className = 'src-lang';
+        lang.textContent = 'Python';
+        var btn = document.createElement('button');
+        btn.className = 'src-copy';
+        btn.type = 'button';
+        btn.textContent = COPY;
+        btn.addEventListener('click', function () {
+          var t = code ? code.innerText : pre.innerText;
+          var done = function () { btn.textContent = COPIED; setTimeout(function () { btn.textContent = COPY; }, 1500); };
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(t).then(done, function () { fallbackCopy(t, btn, COPY, COPIED); });
+          } else { fallbackCopy(t, btn, COPY, COPIED); }
+        });
+        bar.appendChild(lang);
+        bar.appendChild(btn);
+        wrap.insertBefore(bar, pre);
       });
-      bar.appendChild(lang);
-      bar.appendChild(btn);
-      wrap.insertBefore(bar, pre);
-    });
-    function fallbackCopy(text, btn) {
-      var ta = document.createElement('textarea');
-      ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
-      document.body.appendChild(ta); ta.select();
-      try { document.execCommand('copy'); btn.textContent = '已复制'; } catch (e) {}
-      document.body.removeChild(ta);
-      setTimeout(function () { btn.textContent = '复制'; }, 1500);
-    }
+      function fallbackCopy(text, btn, copy, copied) {
+        var ta = document.createElement('textarea');
+        ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'; ta.style.top = '0';
+        document.body.appendChild(ta); ta.focus(); ta.select();
+        try { document.execCommand('copy'); btn.textContent = copied; } catch (e) {}
+        document.body.removeChild(ta);
+        setTimeout(function () { btn.textContent = copy; }, 1500);
+      }
+    })();
   </script>
 </body>
 </html>
