@@ -1,0 +1,1011 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hermes Agent 架构全景：从消息网关到长期记忆 — Daniel Liu</title>
+  <meta content="四篇合一：消息网关、WhatsApp、自我进化、长期记忆——基于真实源码的架构深潜。" name="description" />
+  <link href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,600,600i,700,700i|Raleway:300,300i,400,400i,500,500i,600,600i,700,700i|Poppins:300,300i,400,400i,500,500i,600,600i,700,700i" rel="stylesheet">
+  
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WhatsApp Integration: Cloud API, Webhooks, and Failure Isolation — Daniel Liu</title>
+  <meta content="Walking the Meta Cloud API path: webhook ingestion, Graph API delivery, and the three engineering details that keep a group chat from becoming a spam bot." name="description" />
+  <link href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,600,600i,700,700i|Raleway:300,300i,400,400i,500,500i,600,600i,700,700i|Poppins:300,300i,400,400i,500,500i,600,600i,700,700i" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>document.addEventListener("DOMContentLoaded", function(){ if(window.mermaid){ mermaid.initialize({startOnLoad:true, theme:"dark", themeVariables:{fontSize:"15px"}}); } });</script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+  
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+  <style>
+    :root {
+      --bg: #010e1b;
+      --surface: #09203a;
+      --fg: #e8eef5;
+      --muted: #9aa6b2;
+      --border: rgba(255,255,255,.12);
+      --accent: #12d640;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font: 19px/1.7 Georgia, 'Iowan Old Style', 'Songti SC', serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    .wrap { max-width: 700px; margin: 0 auto; padding: 40px 28px 96px; }
+
+    /* Masthead */
+    nav.top {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 13px; letter-spacing: .04em;
+      display: flex; align-items: center; gap: 22px;
+      color: var(--muted); margin-bottom: 64px;
+      border-bottom: 1px solid var(--border); padding-bottom: 18px;
+    }
+    nav.top .wordmark { color: var(--fg); font-weight: 700; font-size: 15px; letter-spacing: .02em; }
+    nav.top a { color: var(--muted); text-decoration: none; transition: color .2s; }
+    nav.top a:hover, nav.top a.active { color: var(--accent); }
+
+    /* Article header */
+    .eyebrow {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 12px; text-transform: uppercase; letter-spacing: .12em;
+      color: var(--accent); margin-bottom: 16px;
+    }
+    h1 {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: clamp(34px, 5.4vw, 52px); line-height: 1.08;
+      letter-spacing: -0.02em; margin: 0 0 18px; color: #fff;
+    }
+    .deck {
+      font-size: 21px; line-height: 1.5; color: var(--muted);
+      margin: 0 0 28px; font-style: italic;
+    }
+    .byline {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 13.5px; color: var(--muted);
+      display: flex; align-items: center; gap: 12px; margin: 0 0 44px;
+    }
+    .byline .avatar {
+      width: 34px; height: 34px; border-radius: 50%;
+      background: var(--accent); color: #010e1b;
+      display: grid; place-items: center; font-weight: 700; font-size: 13px;
+      font-family: Raleway, sans-serif;
+    }
+
+    /* Hero diagram */
+    .hero-diagram {
+      margin: 0 0 48px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 28px; overflow-x: auto;
+    }
+    .hero-diagram .mermaid { font-size: 15px; }
+    .hero-diagram figcaption {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 12.5px; color: var(--muted); margin-top: 14px; text-align: center;
+    }
+
+    /* Body */
+    p { margin: 26px 0; }
+    p:first-of-type::first-letter {
+      float: left; font-size: 66px; line-height: .82;
+      padding: 6px 12px 0 0; font-weight: 700; color: var(--accent);
+      font-family: Georgia, serif;
+    }
+    h2 {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 27px; letter-spacing: -0.01em;
+      margin: 60px 0 14px; line-height: 1.25; color: #fff;
+    }
+    h3 {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 19px; color: var(--accent); margin: 34px 0 8px;
+    }
+    a.inline { color: var(--accent); text-decoration: none; border-bottom: 1px solid rgba(18,214,64,.4); }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      background: var(--surface); border: 1px solid var(--border);
+      padding: 1px 5px; border-radius: 4px; font-size: .82em; color: #b8f5c8;
+    }
+    ul, ol { color: var(--fg); line-height: 1.8; margin: 20px 0; padding-left: 24px; }
+    li { margin-bottom: 8px; }
+
+    /* Pull quote */
+    blockquote.pull {
+      margin: 44px 0; padding: 4px 0 4px 30px;
+      font-size: 25px; line-height: 1.42; color: #fff;
+      border-left: 3px solid var(--accent); font-style: italic;
+      font-family: Georgia, 'Songti SC', serif;
+    }
+    /* Inline blockquote */
+    blockquote.inline {
+      margin: 36px 0; padding: 16px 22px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--muted); font-size: 16px; line-height: 1.6;
+    }
+
+    /* Diagram figure */
+    figure.diagram { margin: 44px 0; }
+    figure.diagram .mermaid {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 22px; overflow-x: auto;
+    }
+    figure.diagram figcaption {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 12.5px; color: var(--muted); margin-top: 10px; text-align: center;
+    }
+
+    /* Author footer */
+    .author {
+      margin-top: 72px; padding-top: 28px; border-top: 1px solid var(--border);
+      display: flex; gap: 16px; align-items: flex-start;
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+    }
+    .author .avatar {
+      flex: 0 0 auto; width: 48px; height: 48px; border-radius: 50%;
+      background: var(--accent); color: #010e1b; display: grid; place-items: center;
+      font-weight: 700; font-family: Raleway, sans-serif;
+    }
+    .author .bio { font-size: 14px; color: var(--muted); line-height: 1.6; }
+    .author .bio strong { color: var(--fg); display: block; margin-bottom: 4px; font-size: 15px; }
+
+    /* Related */
+    .related { margin-top: 64px; }
+    .related h4 {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 13px; text-transform: uppercase; letter-spacing: .1em;
+      color: var(--muted); margin: 0 0 20px;
+    }
+    .related .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
+    .related .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; overflow: hidden; text-decoration: none; color: inherit;
+      transition: transform .2s, border-color .2s; display: block;
+    }
+    .related .card:hover { transform: translateY(-3px); border-color: var(--accent); }
+    .related .card .thumb { aspect-ratio: 16/9; background: linear-gradient(135deg, #0a2540, #04101f); }
+    .related .card .body { padding: 14px 14px 16px; }
+    .related .card .title {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 14.5px; font-weight: 600; color: var(--fg); line-height: 1.35;
+    }
+    .related .card:hover .title { color: var(--accent); }
+    .related .card .excerpt { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
+    .related .card .date {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 11px; color: var(--muted); margin-top: 8px;
+    }
+
+    /* Language switch */
+    .lang-switch {
+      margin-top: 56px; padding-top: 24px; border-top: 1px solid var(--border);
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 15px; color: var(--muted); text-align: center;
+    }
+    .lang-switch a {
+      color: var(--accent); text-decoration: none;
+      border-bottom: 1px solid rgba(18,214,64,.4);
+    }
+
+    /* Click-to-zoom for diagrams */
+    .mermaid { cursor: zoom-in; }
+    .zoom-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.85);
+      display: none; align-items: center; justify-content: center;
+      z-index: 9999; padding: 40px; cursor: zoom-out;
+    }
+    .zoom-overlay.open { display: flex; }
+    .zoom-overlay svg {
+      max-width: 95vw; max-height: 90vh; width: auto; height: auto;
+      background: var(--surface); border-radius: 12px; padding: 24px;
+    }
+
+    @media (max-width: 640px) {
+      .related .grid { grid-template-columns: 1fr; }
+      nav.top { flex-wrap: wrap; gap: 12px 18px; }
+    }
+  
+    .series { margin-top: 56px; padding-top: 22px; border-top: 1px solid var(--border);
+      font-family: Raleway, -apple-system, system-ui, sans-serif; font-size: 14px;
+      color: var(--muted); text-align: center; line-height: 2; }
+    .series a { color: var(--muted); text-decoration: none; }
+    .series a:hover { color: var(--accent); }
+    .series a.cur { color: var(--accent); font-weight: 600; }
+
+    .src-wrap { margin: 22px 0; }
+    .src-bar { display: flex; justify-content: space-between; align-items: center;
+      background: #161b22; border: 1px solid var(--border); border-bottom: none;
+      border-radius: 10px 10px 0 0; padding: 7px 14px; }
+    .src-lang { font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 12px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+    .src-copy { font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 12px; color: var(--muted); background: transparent;
+      border: 1px solid var(--border); border-radius: 6px; padding: 3px 11px;
+      cursor: pointer; transition: color .15s, border-color .15s; }
+    .src-copy:hover { color: var(--accent); border-color: var(--accent); }
+    pre.src { background: #0e1117; border: 1px solid var(--border); border-radius: 0 0 10px 10px;
+      padding: 18px 20px; overflow-x: auto; margin: 0; }
+    pre.src code { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 13px; line-height: 1.7; color: #d7dde8; white-space: pre; }
+    /* highlight.js token colors tuned to the block's dark theme */
+    pre.src code.hljs { background: transparent; padding: 0; }
+    pre.src .hljs-keyword, pre.src .hljs-built_in { color: #ff7b72; }
+    pre.src .hljs-string, pre.src .hljs-comment { color: #a5d6ff; }
+    pre.src .hljs-comment { font-style: italic; opacity: .8; }
+    pre.src .hljs-title, pre.src .hljs-title.function_, pre.src .hljs-function .hljs-title { color: #d2a8ff; }
+    pre.src .hljs-number, pre.src .hljs-type { color: #79c0ff; }
+    pre.src .hljs-attr, pre.src .hljs-params { color: #e3b341; }
+
+    .series { margin-top: 56px; padding-top: 22px; border-top: 1px solid var(--border);
+      font-family: Raleway, -apple-system, system-ui, sans-serif; font-size: 14px;
+      color: var(--muted); text-align: center; line-height: 2; }
+    .series a { color: var(--muted); text-decoration: none; }
+    .series a:hover { color: var(--accent); }
+    .series a.cur { color: var(--accent); font-weight: 600; }
+
+    .src-wrap { margin: 22px 0; }
+    .src-bar { display: flex; justify-content: space-between; align-items: center;
+      background: #161b22; border: 1px solid var(--border); border-bottom: none;
+      border-radius: 10px 10px 0 0; padding: 7px 14px; }
+    .src-lang { font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 12px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+    .src-copy { font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 12px; color: var(--muted); background: transparent;
+      border: 1px solid var(--border); border-radius: 6px; padding: 3px 11px;
+      cursor: pointer; transition: color .15s, border-color .15s; }
+    .src-copy:hover { color: var(--accent); border-color: var(--accent); }
+    pre.src { background: #0e1117; border: 1px solid var(--border); border-radius: 0 0 10px 10px;
+      padding: 18px 20px; overflow-x: auto; margin: 0; }
+    pre.src code { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 13px; line-height: 1.7; color: #d7dde8; white-space: pre; }
+    /* highlight.js token colors tuned to the block's dark theme */
+    pre.src code.hljs { background: transparent; padding: 0; }
+    pre.src .hljs-keyword, pre.src .hljs-built_in { color: #ff7b72; }
+    pre.src .hljs-string, pre.src .hljs-comment { color: #a5d6ff; }
+    pre.src .hljs-comment { font-style: italic; opacity: .8; }
+    pre.src .hljs-title, pre.src .hljs-title.function_, pre.src .hljs-function .hljs-title { color: #d2a8ff; }
+    pre.src .hljs-number, pre.src .hljs-type { color: #79c0ff; }
+    pre.src .hljs-attr, pre.src .hljs-params { color: #e3b341; }
+
+    /* sticky option bar */
+    .optbar { position: sticky; top: 0; z-index: 50;
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      box-shadow: 0 1px 0 rgba(0,0,0,.04); }
+    .optbar-inner { max-width: 740px; margin: 0 auto; padding: 10px 22px;
+      display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+    .parts { display: flex; gap: 4px; flex-wrap: wrap; }
+    .parts a { font-family: Raleway, system-ui, sans-serif; font-size: 13px; font-weight: 600;
+      color: var(--muted); text-decoration: none; padding: 5px 11px; border-radius: 7px;
+      border: 1px solid transparent; transition: all .15s; }
+    .parts a:hover { color: var(--accent); border-color: var(--border); }
+    .parts a.cur { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+    .langtoggle { font-family: Raleway, system-ui, sans-serif; font-size: 13px; font-weight: 600;
+      color: var(--muted); text-decoration: none; padding: 5px 11px; border-radius: 7px;
+      border: 1px solid var(--border); transition: all .15s; white-space: nowrap; }
+    .langtoggle:hover { color: var(--accent); border-color: var(--accent); }
+    /* section separation */
+    section.part { padding-top: 14px; }
+    section.part + section.part { margin-top: 56px; padding-top: 40px; border-top: 1px solid var(--border); }
+    html { scroll-behavior: smooth; }
+    @media (max-width: 640px) {
+      .optbar-inner { padding: 8px 14px; }
+      .parts a { padding: 4px 8px; font-size: 12px; }
+    }
+</style>
+</head>
+<body>
+  <div class="optbar">
+    <div class="optbar-inner">
+      <nav class="parts">
+      <a href="#gateway" data-sec="gateway">1 · Gateway</a>
+      <a href="#whatsapp" data-sec="whatsapp">2 · WhatsApp</a>
+      <a href="#self" data-sec="self">3 · Self-Improving</a>
+      <a href="#memory" data-sec="memory">4 · Memory</a>
+            </nav>
+      <a class="langtoggle" href="hermes-architecture.html">EN</a>
+    </div>
+  </div>
+  <article class="wrap">
+  <section class="part" id="gateway">
+    <div class="eyebrow">架构 &middot; 第 1 / 4 篇</div>
+    <h1>消息网关：把平台与 Agent 彻底解耦</h1>
+    <p class="deck">基于真实源码：每个平台适配器共享的入口契约，以及 GatewayRunner 内部把"协议复杂度"挡在 agent 核心之外的两层结构。</p>
+        <div class="byline">
+      <div class="avatar">DL</div>
+      <span>By Daniel Liu &middot; August 23, 2026 &middot; 8 min read</span>
+    </div>
+        <figure class="hero-diagram">
+      <pre class="mermaid">
+flowchart LR
+  U["User"] --> PA["Platform Adapters (WhatsApp, Telegram, ...)"]
+  PA --> GR["Gateway (orchestration, sessions, auth)"]
+  GR --> AG["AIAgent (one conversation loop)"]
+  AG --> GR
+  GR --> PA
+  PA --> U
+      </pre>
+      <figcaption>核心分层：Agent 只管一次对话，所有平台复杂度都在 Gateway 与各适配器里。</figcaption>
+    </figure>
+    <div data-od-id="body">
+      <h2>入口契约</h2>
+      <p>每个平台适配器——Telegram、Discord、Slack、WhatsApp、Signal 等——都继承 <code>BasePlatformAdapter.handle_message(event)</code>（<code>gateway/platforms/base.py:6045</code>）。它的唯一职责是把平台原始消息<strong>归一化</strong>成 <code>MessageEvent</code>，交给 <code>GatewayRunner._handle_message</code>（<code>gateway/run.py:16462</code>）。这条归一化就是接缝：agent 从来看不到"Telegram 更新 vs WhatsApp webhook"的区别，它只看到 <code>MessageEvent</code>。</p>
+      <p>方法（节选）<strong>立刻 return</strong>：真正的处理被 spawn 成后台任务，好让消息能一边跑 agent 一边被新消息打断，而不是排在后面（<code>gateway/platforms/base.py:6045</code>）：</p>
+      <pre class="src"><code>async def handle_message(self, event: MessageEvent) -> None:
+    """Process an incoming message. Returns quickly by spawning
+    background tasks, so new messages can be processed even while an
+    agent is running (interruption support)."""
+    if not self._message_handler:
+        return
+    if event.allow_gateway_control:
+        coerce_plaintext_gateway_command(event)
+    # Telegram topic recovery（仅 DM 会话），然后派生 key
+    session_key = build_session_key(event.source, ...)
+    # ...随后 _process_message_background() 把这一轮脱离调用方 spawn 出去
+    # route into GatewayRunner._handle_message(event, session_key, ...)</code></pre>
+      <p>节选里藏着两个细节。其一，<code>build_session_key(event.source, ...)</code> 不只是对 chat id 做哈希——它还会并入 <code>group_sessions_per_user</code> 与 <code>thread_sessions_per_user</code>，于是群里可以按用户隔离会话、线程可以各自成会话。同一平台 + 同一会话 + 同一作用域永远算出同一个 key，这正是下一层"按会话路由"的依据。其二，spawn 才是"可打断"的真正来源：因为这一轮跑在后台任务里，新来的 <code>/stop</code> 或 <code>/new</code> 会绕过活跃会话锁、被内联派发，而不是漏进对话正文、也不会卡死在锁上。其三，最开头那行 <code>if not self._message_handler: return</code> 解释了为什么适配器可以先被实例化、注册，再接上正在运行的 GatewayRunner——在 handler 挂上之前，消息只是空转。</p>
+
+      <h2>GatewayRunner 内部的两层</h2>
+      <p>GatewayRunner 分成<strong>会话路由层</strong>——按 <code>session_key</code> 找/建会话、取活跃会话锁、跑工具审批流——和 <strong>TurnRunner</strong>（<code>gateway/run.py:4291</code>，真正跑一轮 agent 循环、流式输出、把 tool 结果喂回去）。注意坐标：<code>TurnRunner</code> <em>类</em> 在 <code>:4291</code>；<code>:5348</code> 是它的一个方法（<code>run_sync</code>）。这套切分让"平台协议复杂度"和"agent 核心逻辑"互不污染。</p>
+
+      <blockquote class="inline">设计直觉：Gateway 不是 agent 的"前端"，而是 agent 的"邮局"——它只负责把信（MessageEvent）正确投递、把回信（final_response）正确发出，绝不替 agent 思考。</blockquote>
+
+      <figure class="diagram">
+        <pre class="mermaid">
+flowchart TD
+  W["Webhook / inbox"] --> A["Adapter.handle_message()"]
+  A --> E["MessageEvent"]
+  E --> H["GatewayRunner._handle_message()"]
+  H --> S{"session_key resolved?"}
+  S -->|yes| L["acquire active-session lock"]
+  S -->|no| C["create session"]
+  C --> L
+  L --> T["TurnRunner (run.py:4291)"]
+  T --> AG["AIAgent loop"]
+  AG --> F["final_response"]
+  F --> H
+  H --> O["send() back to adapter"]
+        </pre>
+        <figcaption>图 1 — 一条入站消息的路径：归一化、按会话路由、跑一轮、流式回传。适配器与 Gateway 包揽了 AIAgent 方框之外的一切。</figcaption>
+      </figure>
+
+      <h2>为什么这个分层重要</h2>
+      <p>关键约束（来自 <code>AGENTS.md</code>）是 <strong>Per-conversation prompt caching is sacred</strong>：每轮对话复用缓存前缀，任何中途改动 system prompt 或 tool schema 都会让缓存失效、成本翻倍。因为 Gateway 管会话/作用域、agent 保持"纯一次对话循环"，同一个 agent 实例得以按会话复用而不改其上下文——缓存在 20+ 平台间都保得住。甚至还有自愈：若适配器持有一个会话的过期锁、而它的宿主任务早已退出（split-brain，issue #11016），它会清掉这把锁、落到常规派发，用户就不会卡在一把死锁后面。</p>
+
+      <h2>小结</h2>
+      <ul>
+        <li><strong>一个契约，多平台：</strong><code>BasePlatformAdapter.handle_message</code> 是唯一的接缝；适配器归一化，agent 对平台无感。</li>
+        <li><strong>内部两层：</strong>会话路由（解析/加锁/审批）与 TurnRunner（跑循环）——协议复杂度永不触及 agent 核心。<code>TurnRunner</code> 在 <code>run.py:4291</code>。</li>
+        <li><strong>分层是为了缓存：</strong>"纯一次对话循环"的 agent，才让 prompt caching 在 20+ 平台间不被破坏。</li>
+      </ul>
+    </div>
+        <div class="author">
+      <div class="avatar">DL</div>
+      <div class="bio">
+        <strong>Daniel Liu</strong>
+        软件工程师，写 AI Agent、基础设施，以及把它们接进日常聊天软件的小工具。这个博客记录边做边学的东西。
+      </div>
+    </div>
+  </section>
+
+  <section class="part" id="whatsapp">
+    <div class="eyebrow">架构 &middot; 第 2 / 4 篇</div>
+    <h1>WhatsApp 接入：Cloud API、Webhook 与失败隔离</h1>
+    <p class="deck">基于真实源码拆解 Hermes 的 WhatsApp 路径——以及抗重试、抗错误扩散、@ 提及门控这些让它在嘈杂群聊里安全的细节。</p>
+        <div class="byline">
+      <div class="avatar">DL</div>
+      <span>By Daniel Liu &middot; August 23, 2026 &middot; 8 min read</span>
+    </div>
+        <figure class="hero-diagram">
+      <pre class="mermaid">
+flowchart LR
+  M["Meta Webhook"] -->|"POST message"| C["WhatsAppCloudAdapter.connect()"]
+  C -->|"MessageEvent"| G["GatewayRunner"]
+  G --> A["AIAgent"]
+  A -->|"final_response"| G
+  G -->|"send()"| API["Graph API"]
+  API --> U["User / Group"]
+      </pre>
+      <figcaption>WhatsApp 路径：webhook 收消息，Graph API 把回复发回去。</figcaption>
+    </figure>
+    <div data-od-id="body">
+      <h2>Cloud API 的形态</h2>
+      <p>WhatsApp 用 webhook <em>收</em>消息、用 Graph API <em>发</em>消息。<code>WhatsAppCloudAdapter.connect()</code>（<code>gateway/platforms/whatsapp_cloud.py:435</code>）注册 webhook 校验握手与入站消息回调。校验通过后，每条用户消息以 webhook POST 到达，被归一化成 <code>MessageEvent</code>，流入第 1 篇讲的 GatewayRunner。真实代码里，它先<strong>拒绝启动</strong>（缺依赖或配置缺失就返回），再建两条传输——入站 webhook 服务、出站 <code>httpx</code> 客户端：</p>
+      <pre class="src"><code>async def connect(self, *, is_reconnect: bool = False) -> bool:
+    if not check_whatsapp_cloud_requirements():
+        self._set_fatal_error("whatsapp_cloud_deps_missing", ...)
+        return False
+    if not self._phone_number_id or not self._access_token:
+        self._set_fatal_error("whatsapp_cloud_unconfigured", ...)
+        return False
+    # Outbound HTTP client with tight keepalive.
+    self._http_client = httpx.AsyncClient(
+        timeout=30.0, limits=platform_httpx_limits())
+    # Inbound webhook server next ...</code></pre>
+      <p>注意开头的两道<strong>失败即停</strong>护栏：缺依赖、或 phone number id / token 没配，适配器在半启动前就停下。正是这份纪律，让一个配错的 bot 不会默默吞掉 webhook。</p>
+
+      <h2>抗重试</h2>
+      <p>Meta 的 webhook 会<strong>重复投递</strong>——一条消息可能到两三次。适配器用 <code>_dedup_wamid</code>（按平台消息 id 去重）守住，让一条消息绝不触发两次回复。没有它，每次抖动投递都会让你的 agent 答两遍（也多花一倍钱）。</p>
+
+      <h2>抗错误扩散</h2>
+      <p>当发给某接收者失败时，处理器只 <code>log</code>，<strong>不抛异常</strong>。一条发不出去的消息不该炸掉整个 webhook 处理循环，否则该适配器上的其他对话全黑。在边缘做隔离，才能避免一次坏发送连锁拖垮全部。</p>
+
+      <figure class="diagram">
+        <pre class="mermaid">
+flowchart TD
+  W["Webhook POST"] --> D{"_dedup_wamid?"}
+  D -->|"seen before"| X["drop duplicate"]
+  D -->|"new"| N["normalize to MessageEvent"]
+  N --> H["GatewayRunner"]
+  H --> S["send via Graph API"]
+  S -->|"ok"| OK["delivered"]
+  S -->|"error"| L["log only — do NOT throw"]
+        </pre>
+        <figcaption>图 1 — 入站去重与出站失败隔离。重复投递被丢弃；发送失败只记日志、不抛出。</figcaption>
+      </figure>
+
+      <h2>到底谁会被回复</h2>
+      <p>在群里你不会想让机器人句句都答。适配器 mixin 里的 mention / allowlist 策略决定"只有被 @ 才回"，让它始终是个帮手而非垃圾机器人。这是每个话痨适配器都需要的同款模式；WhatsApp 因为群聊吵而格外显眼。</p>
+
+      <h2>小结</h2>
+      <ul>
+        <li><strong>收发分离：</strong>webhook 收、Graph API 发；<code>connect()</code> 把两边接上。</li>
+        <li><strong>抗重试：</strong><code>_dedup_wamid</code> 阻止重复投递产生重复回复。</li>
+        <li><strong>失败隔离：</strong><code>send()</code> 失败只记日志不抛出——一条坏消息永不拖垮循环。</li>
+        <li><strong>@ 门控：</strong>群里只有被 @ 才回，保持帮手定位，不做喷子。</li>
+      </ul>
+    </div>
+        <div class="author">
+      <div class="avatar">DL</div>
+      <div class="bio">
+        <strong>Daniel Liu</strong>
+        软件工程师，写 AI Agent、基础设施，以及把它们接进日常聊天软件的小工具。这个博客记录边做边学的东西。
+      </div>
+    </div>
+  </section>
+
+  <section class="part" id="self">
+    <div class="eyebrow">架构 &middot; 第 3 / 4 篇</div>
+    <h1>自我进化：把经验固化为 Skill</h1>
+    <p class="deck">基于真实源码看 Curator——一个纯函数状态机，把经验变成 skill，默认零成本、可选 LLM 合并。</p>
+        <div class="byline">
+      <div class="avatar">DL</div>
+      <span>By Daniel Liu &middot; August 23, 2026 &middot; 8 min read</span>
+    </div>
+        <figure class="hero-diagram">
+      <pre class="mermaid">
+flowchart LR
+  EXP["Hard-won experience"] --> SK["Skill (SKILL.md)"]
+  SK --> CUR["Curator: run_curator_review"]
+  CUR -->|"needs judgment"| LLM["optional LLM semantic merge"]
+  CUR -->|"no judgment"| WRITE["merge / archive / update"]
+      </pre>
+      <figcaption>自我进化是 经验 → skill → curator。模型从不去改 agent 代码。</figcaption>
+    </figure>
+    <div data-od-id="body">
+      <h2>"自我进化"到底指什么</h2>
+      <p>Hermes 的自我进化<strong>不是</strong>让模型在线改自己的源码，而是把<strong>可复用的经验固化为 skill</strong>——<code>SKILL.md</code> 形式的流程知识——再由后台 <strong>Curator</strong> 维护这套收藏的健康度。agent 是通过积累经过把关的 playbook 变聪明，而不是靠重写自己。</p>
+
+      <blockquote class="pull">"Self-Improving 不是让 agent 改自己的代码，而是把经验固化为 skill。"</blockquote>
+
+      <h2>Curator 状态机</h2>
+      <p><code>agent/curator.py</code> 的 <code>run_curator_review</code>（<code>:1511</code>）是一个<strong>纯函数状态机</strong>：扫描现有 skill、判断该合并/归档/更新，可选调用 LLM 做"语义合并"。函数签名露出它的旋钮：同步/守护进程选择、dry-run 只报告不改动、<code>consolidate</code> 开关门控 LLM 合并：</p>
+      <pre class="src"><code>def run_curator_review(
+    on_summary=None, synchronous=False,
+    dry_run=False, consolidate=None) -> Dict[str, Any]:
+    """Execute a single curator review pass.
+      1. Apply automatic state transitions (pure, no LLM).
+      2. If consolidation enabled AND agent-created skills exist,
+         spawn a forked AIAgent for the LLM review prompt.
+      3. Update .curator_state with last_run_at + summary.
+      4. Invoke on_summary with a user-visible description.
+    """
+    if consolidate is None:
+        consolidate = get_consolidate()   # 默认 OFF
+    ...</code></pre>
+      <p>第 2 步的注释是关键：<strong>"consolidate 默认 OFF"</strong> 意味着普通运行完全跳过 fork 出来的 LLM 评审——只跑确定性的闲置 prune。这正解释了为什么默认零 token。其余取舍都从同一结构里长出来：</p>
+      <ol>
+        <li><strong>默认零 LLM 成本</strong>——状态机本身不调模型，只有在真正需要语义判断时才花 token。</li>
+        <li><strong>dry-run 可预演</strong>——先打印"将要做什么"，确认无误再落盘。</li>
+        <li><strong>pinned skill 永不动</strong>——被显式钉住的 skill 跳过所有自动化，策展不会冲掉人工精心写的内容。</li>
+      </ol>
+
+      <figure class="diagram">
+        <pre class="mermaid">
+flowchart TD
+  S["scan skills"] --> D{"merge / archive / update?"}
+  D -->|"needs semantic judgment"| M["optional LLM merge"]
+  D -->|"mechanical"| W["apply change"]
+  M --> W
+  W --> P{"pinned?"}
+  P -->|yes| K["skip — leave untouched"]
+  P -->|no| OK["write result"]
+        </pre>
+        <figcaption>图 1 — Curator 的决策流。机械改动直接应用；只有语义情形才花 token，pinned skill 始终受保护。</figcaption>
+      </figure>
+
+      <h2>小结</h2>
+      <ul>
+        <li><strong>不是自我改写：</strong>模型从不去改 agent 代码，它产出的是 skill。</li>
+        <li><strong>纯函数 curtor：</strong><code>run_curator_review</code> 确定且可测。</li>
+        <li><strong>默认零成本：</strong>只有真正的语义合并才用 LLM。</li>
+        <li><strong>设计即安全：</strong>dry-run 预演 + pinned 不动，策展不会毁掉手写内容。</li>
+      </ul>
+    </div>
+        <div class="author">
+      <div class="avatar">DL</div>
+      <div class="bio">
+        <strong>Daniel Liu</strong>
+        软件工程师，写 AI Agent、基础设施，以及把它们接进日常聊天软件的小工具。这个博客记录边做边学的东西。
+      </div>
+    </div>
+  </section>
+
+  <section class="part" id="memory">
+    <div class="eyebrow">架构 &middot; 第 4 / 4 篇</div>
+    <h1>长期记忆：事实落盘，会话进 FTS5</h1>
+    <p class="deck">基于真实源码拆解 Hermes 的两条记忆线——写盘的事实记忆，与建全文索引、可跨会话检索的会话记忆。</p>
+        <div class="byline">
+      <div class="avatar">DL</div>
+      <span>By Daniel Liu &middot; August 23, 2026 &middot; 8 min read</span>
+    </div>
+        <figure class="hero-diagram">
+      <pre class="mermaid">
+flowchart LR
+  F["Fact memory"] --> MM["MemoryManager → Provider"]
+  MM --> D["MEMORY.md on disk"]
+  S["Session memory"] --> DB["SessionDB (hermes_state.py)"]
+  DB --> FT["FTS5 index (messages_fts_cjk)"]
+  FT --> Q["session_search"]
+      </pre>
+      <figcaption>两条线：事实落盘；会话建全文索引以支持跨会话检索。</figcaption>
+    </figure>
+    <div data-od-id="body">
+      <h2>事实记忆</h2>
+      <p>事实经 <code>MemoryManager → MemoryProvider</code>——后台线程、串行、去噪。最朴素的实现 <code>MemoryStore</code>（<code>tools/memory_tool.py:159</code>）通过 <code>save_to_disk()</code>（<code>:387</code>）把 <code>MEMORY.md</code> 直接落盘。方法本身很小；安全性在 <code>_write_file</code>：它用<strong>原子临时文件 + rename</strong>，并发读取者永远不会看到一个写一半的文件：</p>
+      <pre class="src"><code>def save_to_disk(self, target: str):
+    """Persist entries to the appropriate file. Called after every mutation."""
+    get_memory_dir().mkdir(parents=True, exist_ok=True)
+    self._write_file(self._path_for(target), self._entries_for(target))
+
+@staticmethod
+def _write_file(path: Path, entries: List[str]):
+    """Atomic temp-file + rename: readers see old OR new, never empty."""
+    content = ENTRY_DELIMITER.join(entries) if entries else ""
+    atomic_write_text(path, content, tmp_prefix=".mem_")</code></pre>
+      <p>这就是耐久的"我对用户已知什么"的存储。</p>
+
+      <h2>会话记忆</h2>
+      <p>另一条线是会话级的：<code>hermes_state.py</code> 用 FTS5 建全文索引，含 CJK 分词器 <code>messages_fts_cjk</code>（<code>:2685</code>）。这个索引是 <code>session_search</code> 的底座——能跨历史会话检索，而不只是单次会话内。</p>
+
+      <h2>并发下的安全写入</h2>
+      <p>朴素的 <code>MemoryStore</code> 曾有一个竞态：两次读文件中间夹一次写，可能静默覆盖外部编辑。修复是<strong>只重读一次</strong>目标，然后在<strong>同一份快照</strong>上同时做 drift 检测与解析——这样两次操作之间的外部写入不会被无察觉地覆盖。调用 <code>save_to_disk()</code> 的 <code>add()</code> 路径（<code>:414</code>）才露出真纪律：改动前<strong>在锁内重读磁盘</strong>、拒绝完全重复、若文件读成空（瞬时抖动，否则会清空所有历史记忆）则拒绝写：</p>
+      <pre class="src"><code>def add(self, target, content):
+    with self._file_lock(self._path_for(target)):
+        if self._reload_target(target, skip_drift=True) is _READ_FAILED:
+            return _read_failed_error(self._path_for(target))
+        ...
+        if content in entries:               # 拒绝完全重复
+            return self._success_response(target, "Entry already exists.")
+        if new_total > limit:                # 字符上限护栏
+            return self._consolidation_failure({...})
+        entries.append(content)
+        self._set_entries(target, entries)
+        self.save_to_disk(target)            # 耐久写入</code></pre>
+
+      <figure class="diagram">
+        <pre class="mermaid">
+flowchart LR
+  IN["Incoming memory op"] --> ADD{"add?"}
+  ADD -->|yes| AP["append (skip drift guard)"]
+  ADD -->|no| RE["replace / remove / apply_batch"]
+  RE --> DR["_reload_target(): read disk ONCE"]
+  DR --> DT["drift check + parse on SAME snapshot"]
+  DT -->|"drifted"| AB["abort change"]
+  DT -->|"clean"| W["write file"]
+  AP --> W
+        </pre>
+        <figcaption>图 1 — 记忆写入的竞态防护。一次读盘、一份快照同时做 drift 检测 + 解析。</figcaption>
+      </figure>
+
+      <h2>小结</h2>
+      <ul>
+        <li><strong>两条线：</strong>事实走 <code>MemoryManager → Provider</code>（落盘）；会话走 <code>SessionDB + FTS5</code>（检索）。</li>
+        <li><strong>FTS5 + CJK：</strong><code>messages_fts_cjk</code> 让 <code>session_search</code> 能跨会话检索，含中文。</li>
+        <li><strong>修过并发：</strong>写入路径现在只重读一次、在同一快照上做 drift 检测与解析，堵住了被覆盖的竞态。</li>
+      </ul>
+      <p style="color:var(--muted);font-size:14px;">本系列到此结束。文中所有 <code>file:line</code> 引用均来自 <code>hermes-agent</code> 当前源码，可作对照阅读的坐标。</p>
+    </div>
+        <div class="author">
+      <div class="avatar">DL</div>
+      <div class="bio">
+        <strong>Daniel Liu</strong>
+        软件工程师，写 AI Agent、基础设施，以及把它们接进日常聊天软件的小工具。这个博客记录边做边学的东西。
+      </div>
+    </div>
+  </section>
+
+  </article>
+  <script>document.addEventListener("DOMContentLoaded", function(){ if(window.mermaid){ mermaid.initialize({startOnLoad:true, theme:"dark", themeVariables:{fontSize:"15px"}}); } });</script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+  <style>
+    :root {
+      --bg: #010e1b;
+      --surface: #09203a;
+      --fg: #e8eef5;
+      --muted: #9aa6b2;
+      --border: rgba(255,255,255,.12);
+      --accent: #12d640;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font: 19px/1.7 Georgia, 'Iowan Old Style', 'Songti SC', serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    .wrap { max-width: 700px; margin: 0 auto; padding: 40px 28px 96px; }
+
+    /* Masthead */
+    nav.top {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 13px; letter-spacing: .04em;
+      display: flex; align-items: center; gap: 22px;
+      color: var(--muted); margin-bottom: 64px;
+      border-bottom: 1px solid var(--border); padding-bottom: 18px;
+    }
+    nav.top .wordmark { color: var(--fg); font-weight: 700; font-size: 15px; letter-spacing: .02em; }
+    nav.top a { color: var(--muted); text-decoration: none; transition: color .2s; }
+    nav.top a:hover, nav.top a.active { color: var(--accent); }
+
+    /* Article header */
+    .eyebrow {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 12px; text-transform: uppercase; letter-spacing: .12em;
+      color: var(--accent); margin-bottom: 16px;
+    }
+    h1 {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: clamp(34px, 5.4vw, 52px); line-height: 1.08;
+      letter-spacing: -0.02em; margin: 0 0 18px; color: #fff;
+    }
+    .deck {
+      font-size: 21px; line-height: 1.5; color: var(--muted);
+      margin: 0 0 28px; font-style: italic;
+    }
+    .byline {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 13.5px; color: var(--muted);
+      display: flex; align-items: center; gap: 12px; margin: 0 0 44px;
+    }
+    .byline .avatar {
+      width: 34px; height: 34px; border-radius: 50%;
+      background: var(--accent); color: #010e1b;
+      display: grid; place-items: center; font-weight: 700; font-size: 13px;
+      font-family: Raleway, sans-serif;
+    }
+
+    /* Hero diagram */
+    .hero-diagram {
+      margin: 0 0 48px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 28px; overflow-x: auto;
+    }
+    .hero-diagram .mermaid { font-size: 15px; }
+    .hero-diagram figcaption {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 12.5px; color: var(--muted); margin-top: 14px; text-align: center;
+    }
+
+    /* Body */
+    p { margin: 26px 0; }
+    p:first-of-type::first-letter {
+      float: left; font-size: 66px; line-height: .82;
+      padding: 6px 12px 0 0; font-weight: 700; color: var(--accent);
+      font-family: Georgia, serif;
+    }
+    h2 {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 27px; letter-spacing: -0.01em;
+      margin: 60px 0 14px; line-height: 1.25; color: #fff;
+    }
+    h3 {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 19px; color: var(--accent); margin: 34px 0 8px;
+    }
+    a.inline { color: var(--accent); text-decoration: none; border-bottom: 1px solid rgba(18,214,64,.4); }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      background: var(--surface); border: 1px solid var(--border);
+      padding: 1px 5px; border-radius: 4px; font-size: .82em; color: #b8f5c8;
+    }
+    ul, ol { color: var(--fg); line-height: 1.8; margin: 20px 0; padding-left: 24px; }
+    li { margin-bottom: 8px; }
+
+    /* Pull quote */
+    blockquote.pull {
+      margin: 44px 0; padding: 4px 0 4px 30px;
+      font-size: 25px; line-height: 1.42; color: #fff;
+      border-left: 3px solid var(--accent); font-style: italic;
+      font-family: Georgia, 'Songti SC', serif;
+    }
+    /* Inline blockquote */
+    blockquote.inline {
+      margin: 36px 0; padding: 16px 22px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--muted); font-size: 16px; line-height: 1.6;
+    }
+
+    /* Diagram figure */
+    figure.diagram { margin: 44px 0; }
+    figure.diagram .mermaid {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 22px; overflow-x: auto;
+    }
+    figure.diagram figcaption {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 12.5px; color: var(--muted); margin-top: 10px; text-align: center;
+    }
+
+    /* Author footer */
+    .author {
+      margin-top: 72px; padding-top: 28px; border-top: 1px solid var(--border);
+      display: flex; gap: 16px; align-items: flex-start;
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+    }
+    .author .avatar {
+      flex: 0 0 auto; width: 48px; height: 48px; border-radius: 50%;
+      background: var(--accent); color: #010e1b; display: grid; place-items: center;
+      font-weight: 700; font-family: Raleway, sans-serif;
+    }
+    .author .bio { font-size: 14px; color: var(--muted); line-height: 1.6; }
+    .author .bio strong { color: var(--fg); display: block; margin-bottom: 4px; font-size: 15px; }
+
+    /* Related */
+    .related { margin-top: 64px; }
+    .related h4 {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 13px; text-transform: uppercase; letter-spacing: .1em;
+      color: var(--muted); margin: 0 0 20px;
+    }
+    .related .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
+    .related .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; overflow: hidden; text-decoration: none; color: inherit;
+      transition: transform .2s, border-color .2s; display: block;
+    }
+    .related .card:hover { transform: translateY(-3px); border-color: var(--accent); }
+    .related .card .thumb { aspect-ratio: 16/9; background: linear-gradient(135deg, #0a2540, #04101f); }
+    .related .card .body { padding: 14px 14px 16px; }
+    .related .card .title {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 14.5px; font-weight: 600; color: var(--fg); line-height: 1.35;
+    }
+    .related .card:hover .title { color: var(--accent); }
+    .related .card .excerpt { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
+    .related .card .date {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 11px; color: var(--muted); margin-top: 8px;
+    }
+
+    /* Language switch */
+    .lang-switch {
+      margin-top: 56px; padding-top: 24px; border-top: 1px solid var(--border);
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 15px; color: var(--muted); text-align: center;
+    }
+    .lang-switch a {
+      color: var(--accent); text-decoration: none;
+      border-bottom: 1px solid rgba(18,214,64,.4);
+    }
+
+    /* Click-to-zoom for diagrams */
+    .mermaid { cursor: zoom-in; }
+    .zoom-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.85);
+      display: none; align-items: center; justify-content: center;
+      z-index: 9999; padding: 40px; cursor: zoom-out;
+    }
+    .zoom-overlay.open { display: flex; }
+    .zoom-overlay svg {
+      max-width: 95vw; max-height: 90vh; width: auto; height: auto;
+      background: var(--surface); border-radius: 12px; padding: 24px;
+    }
+
+    @media (max-width: 640px) {
+      .related .grid { grid-template-columns: 1fr; }
+      nav.top { flex-wrap: wrap; gap: 12px 18px; }
+    }
+  
+    .series { margin-top: 56px; padding-top: 22px; border-top: 1px solid var(--border);
+      font-family: Raleway, -apple-system, system-ui, sans-serif; font-size: 14px;
+      color: var(--muted); text-align: center; line-height: 2; }
+    .series a { color: var(--muted); text-decoration: none; }
+    .series a:hover { color: var(--accent); }
+    .series a.cur { color: var(--accent); font-weight: 600; }
+
+    .src-wrap { margin: 22px 0; }
+    .src-bar { display: flex; justify-content: space-between; align-items: center;
+      background: #161b22; border: 1px solid var(--border); border-bottom: none;
+      border-radius: 10px 10px 0 0; padding: 7px 14px; }
+    .src-lang { font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 12px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+    .src-copy { font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 12px; color: var(--muted); background: transparent;
+      border: 1px solid var(--border); border-radius: 6px; padding: 3px 11px;
+      cursor: pointer; transition: color .15s, border-color .15s; }
+    .src-copy:hover { color: var(--accent); border-color: var(--accent); }
+    pre.src { background: #0e1117; border: 1px solid var(--border); border-radius: 0 0 10px 10px;
+      padding: 18px 20px; overflow-x: auto; margin: 0; }
+    pre.src code { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 13px; line-height: 1.7; color: #d7dde8; white-space: pre; }
+    /* highlight.js token colors tuned to the block's dark theme */
+    pre.src code.hljs { background: transparent; padding: 0; }
+    pre.src .hljs-keyword, pre.src .hljs-built_in { color: #ff7b72; }
+    pre.src .hljs-string, pre.src .hljs-comment { color: #a5d6ff; }
+    pre.src .hljs-comment { font-style: italic; opacity: .8; }
+    pre.src .hljs-title, pre.src .hljs-title.function_, pre.src .hljs-function .hljs-title { color: #d2a8ff; }
+    pre.src .hljs-number, pre.src .hljs-type { color: #79c0ff; }
+    pre.src .hljs-attr, pre.src .hljs-params { color: #e3b341; }
+</style>
+</head>
+<body>
+  <article class="wrap">
+        <nav class="top">
+      <span class="wordmark">Daniel Liu</span>
+      <a href="../index.html">Home</a>
+      <a href="index.html" class="active">Blog</a>
+      <a href="../index.html#projects">Projects</a>
+      <a href="../index.html#skills">Skills</a>
+    </nav>
+    <div class="eyebrow" data-od-id="headline">Architecture &middot; Part 2 of 4</div>
+    <h1 data-od-id="headline">WhatsApp Integration: Cloud API, Webhooks, and Failure Isolation</h1>
+    <p class="deck" data-od-id="headline">A source-grounded walk through Hermes's WhatsApp path — and the retry-, failure-, and mention-handling details that make it safe in a busy group chat.</p>
+        <div class="byline">
+      <div class="avatar">DL</div>
+      <span>By Daniel Liu &middot; August 23, 2026 &middot; 8 min read</span>
+    </div>
+        <figure class="hero-diagram">
+      <pre class="mermaid">
+flowchart LR
+  M["Meta Webhook"] -->|"POST message"| C["WhatsAppCloudAdapter.connect()"]
+  C -->|"MessageEvent"| G["GatewayRunner"]
+  G --> A["AIAgent"]
+  A -->|"final_response"| G
+  G -->|"send()"| API["Graph API"]
+  API --> U["User / Group"]
+      </pre>
+      <figcaption>The WhatsApp path: a webhook delivers inbound messages; the Graph API carries replies back out.</figcaption>
+    </figure>
+    <div data-od-id="body">
+      <h2>The Cloud API shape</h2>
+      <p>WhatsApp uses a webhook to <em>receive</em> messages and the Graph API to <em>send</em> them. <code>WhatsAppCloudAdapter.connect()</code> (<code>gateway/platforms/whatsapp_cloud.py:435</code>) registers the webhook verification handshake and the inbound message callback. Once verified, every user message arrives as a webhook POST, gets normalized into a <code>MessageEvent</code>, and flows into the GatewayRunner we covered in part 1. For real, the method first <strong>refuses to start</strong> if deps or config are missing, then builds the two transports — an inbound webhook server and an outbound <code>httpx</code> client:</p>
+      <pre class="src"><code>async def connect(self, *, is_reconnect: bool = False) -> bool:
+    if not check_whatsapp_cloud_requirements():
+        self._set_fatal_error("whatsapp_cloud_deps_missing", ...)
+        return False
+    if not self._phone_number_id or not self._access_token:
+        self._set_fatal_error("whatsapp_cloud_unconfigured", ...)
+        return False
+    # Outbound HTTP client with tight keepalive.
+    self._http_client = httpx.AsyncClient(
+        timeout=30.0, limits=platform_httpx_limits())
+    # Inbound webhook server next ...</code></pre>
+      <p>Note the two <strong>fail-closed</strong> guards up front: a missing dependency or an unconfigured phone number id / token stops the adapter before it can half-start. That discipline is what keeps a misconfigured bot from silently eating webhooks.</p>
+
+      <h2>Retry-resistance</h2>
+      <p>Meta's webhook <strong>redelivers</strong> — a message can arrive two or three times. The adapter guards with <code>_dedup_wamid</code>, keyed on the platform's message id, so one message never triggers two replies. Without it, every flaky delivery would double your agent's answer (and its cost).</p>
+
+      <h2>Failure containment</h2>
+      <p>When dispatch to a recipient fails, the handler only <code>log</code>s — it does <strong>not throw</strong>. One undeliverable message must not crash the entire webhook-processing loop, or every other conversation on that adapter goes dark. Containment at the edge keeps one bad send from cascading.</p>
+
+      <figure class="diagram">
+        <pre class="mermaid">
+flowchart TD
+  W["Webhook POST"] --> D{"_dedup_wamid?"}
+  D -->|"seen before"| X["drop duplicate"]
+  D -->|"new"| N["normalize to MessageEvent"]
+  N --> H["GatewayRunner"]
+  H --> S["send via Graph API"]
+  S -->|"ok"| OK["delivered"]
+  S -->|"error"| L["log only — do NOT throw"]
+        </pre>
+        <figcaption>Figure 1 — Inbound dedup and outbound failure containment. Redelivery is dropped; a failed send is logged, not thrown.</figcaption>
+      </figure>
+
+      <h2>Who actually gets a reply</h2>
+      <p>In a group, you don't want the bot answering every line. A mention / allowlist policy in the adapter mixin decides "only reply when @-mentioned," so it stays a helper instead of a spam bot. This is the same pattern every chatty adapter needs; WhatsApp just makes it visible because groups are noisy.</p>
+
+      <h2>Takeaways</h2>
+      <ul>
+        <li><strong>In / out split:</strong> webhook for receive, Graph API for send; <code>connect()</code> wires both.</li>
+        <li><strong>Retry-resistance:</strong> <code>_dedup_wamid</code> stops redelivery from producing duplicate replies.</li>
+        <li><strong>Failure containment:</strong> a failed <code>send()</code> logs and moves on — one bad message never kills the loop.</li>
+        <li><strong>Mention gating:</strong> only @-mentions get a reply in groups, keeping it a helper, not a spammer.</li>
+      </ul>
+    </div>
+        <div class="author">
+      <div class="avatar">DL</div>
+      <div class="bio">
+        <strong>Daniel Liu</strong>
+        Software engineer writing about AI agents, infrastructure, and the small tools that wire them into everyday chat apps. This blog is where I document what I learn by building.
+      </div>
+    </div>
+    <p class="lang-switch">Prefer 中文? <a href="hermes-whatsapp-zh.html">Read this article in 中文 &rarr;</a></p>
+  </article>
+  <div class="zoom-overlay" id="zoomOverlay"></div>
+  <script>
+    document.querySelectorAll('.mermaid').forEach(function(el){
+      el.addEventListener('click', function(){
+        var svg = el.querySelector('svg'); if(!svg) return;
+        var overlay = document.getElementById('zoomOverlay');
+        overlay.innerHTML = ''; overlay.appendChild(svg.cloneNode(true));
+        overlay.classList.add('open');
+      });
+    });
+    var zoomOverlay = document.getElementById('zoomOverlay');
+    zoomOverlay.addEventListener('click', function(){ this.classList.remove('open'); this.innerHTML=''; });
+    document.addEventListener('keydown', function(e){ if(e.key==='Escape'){ zoomOverlay.classList.remove('open'); zoomOverlay.innerHTML=''; } });
+  </script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>document.addEventListener('DOMContentLoaded', function () { if (window.hljs) hljs.highlightAll(); });</script>
+  <script>
+    (function () {
+      var isZh = document.documentElement.lang === 'zh-CN';
+      var COPY = isZh ? '复制' : 'Copy';
+      var COPIED = isZh ? '已复制' : 'Copied';
+      document.querySelectorAll('pre.src').forEach(function (pre) {
+        var code = pre.querySelector('code');
+        if (code && !/language-/.test(code.className)) code.className = 'language-python';
+        if (window.hljs && code) { try { window.hljs.highlightElement(code); } catch (e) {} }
+        var wrap = document.createElement('div');
+        wrap.className = 'src-wrap';
+        pre.parentNode.insertBefore(wrap, pre);
+        wrap.appendChild(pre);
+        var bar = document.createElement('div');
+        bar.className = 'src-bar';
+        var lang = document.createElement('span');
+        lang.className = 'src-lang';
+        lang.textContent = 'Python';
+        var btn = document.createElement('button');
+        btn.className = 'src-copy';
+        btn.type = 'button';
+        btn.textContent = COPY;
+        btn.addEventListener('click', function () {
+          var t = code ? code.innerText : pre.innerText;
+          var done = function () { btn.textContent = COPIED; setTimeout(function () { btn.textContent = COPY; }, 1500); };
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(t).then(done, function () { fallbackCopy(t, btn, COPY, COPIED); });
+          } else { fallbackCopy(t, btn, COPY, COPIED); }
+        });
+        bar.appendChild(lang);
+        bar.appendChild(btn);
+        wrap.insertBefore(bar, pre);
+      });
+      function fallbackCopy(text, btn, copy, copied) {
+        var ta = document.createElement('textarea');
+        ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'; ta.style.top = '0';
+        document.body.appendChild(ta); ta.focus(); ta.select();
+        try { document.execCommand('copy'); btn.textContent = copied; } catch (e) {}
+        document.body.removeChild(ta);
+        setTimeout(function () { btn.textContent = copy; }, 1500);
+      }
+      // highlight the active part in the switcher as you scroll
+      var links = Array.prototype.slice.call(document.querySelectorAll('.parts a'));
+      var secs = links.map(function (a) { return document.getElementById(a.getAttribute('data-sec')); });
+      function onScroll() {
+        var pos = window.scrollY + 120;
+        var cur = secs[0];
+        secs.forEach(function (s) { if (s && s.offsetTop <= pos) cur = s; });
+        links.forEach(function (a) {
+          a.classList.toggle('cur', cur && a.getAttribute('data-sec') === cur.id);
+        });
+      }
+      window.addEventListener('scroll', onScroll, { passive: true });
+      onScroll();
+    })();
+  </script>
+</body>
+</html>
