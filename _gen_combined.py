@@ -45,6 +45,11 @@ COMBINED_CSS = """
     /* section separation */
     section.part { padding-top: 14px; }
     section.part + section.part { margin-top: 56px; padding-top: 40px; border-top: 1px solid var(--border); }
+    .sec-foot { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 30px; padding-top: 18px; border-top: 1px solid var(--border); }
+    .footlink { font-family: Raleway, system-ui, sans-serif; font-size: 13px; font-weight: 600;
+      color: var(--muted); text-decoration: none; padding: 5px 13px; border-radius: 7px;
+      border: 1px solid var(--border); transition: all .15s; }
+    .footlink:hover { color: var(--accent); border-color: var(--accent); }
     html { scroll-behavior: smooth; }
     @media (max-width: 640px) {
       .optbar-inner { padding: 8px 14px; }
@@ -64,6 +69,8 @@ def build(lang):
         parts_html += '<a href="#%s" data-sec="%s">%s</a>\n      ' % (secid, secid, label)
     blog_index = 'index.html' if lang == 'en' else 'index.html'
     back_label = '← Blog' if lang == 'en' else '← 博客'
+    foot_top = '↑ Back to top' if lang == 'en' else '↑ 回到顶部'
+    foot_blog = '← Back to Blog' if lang == 'en' else '← 回到博客'
     optbar = (
         '  <div class="optbar">\n'
         '    <div class="optbar-inner">\n'
@@ -88,6 +95,10 @@ def build(lang):
             '    <h1>%s</h1>\n' % c['h1'] +
             '    %s\n' % c['hero'] +
             '    <div data-od-id="body">\n%s\n    </div>\n' % c['body'] +
+            '    <div class="sec-foot">\n'
+            '      <a class="footlink" href="#%s">%s</a>\n' % (secid, foot_top) +
+            '      <a class="footlink" href="index.html">%s</a>\n' % foot_blog +
+            '    </div>\n'
             '  </section>\n\n'
         )
 

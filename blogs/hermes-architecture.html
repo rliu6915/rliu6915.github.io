@@ -293,6 +293,11 @@
     /* section separation */
     section.part { padding-top: 14px; }
     section.part + section.part { margin-top: 56px; padding-top: 40px; border-top: 1px solid var(--border); }
+    .sec-foot { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 30px; padding-top: 18px; border-top: 1px solid var(--border); }
+    .footlink { font-family: Raleway, system-ui, sans-serif; font-size: 13px; font-weight: 600;
+      color: var(--muted); text-decoration: none; padding: 5px 13px; border-radius: 7px;
+      border: 1px solid var(--border); transition: all .15s; }
+    .footlink:hover { color: var(--accent); border-color: var(--accent); }
     html { scroll-behavior: smooth; }
     @media (max-width: 640px) {
       .optbar-inner { padding: 8px 14px; }
@@ -383,6 +388,10 @@ flowchart TD
         <li><strong>Caching is the reason:</strong> a pure "one conversation loop" agent is what lets prompt caching stay intact across 20+ platforms.</li>
       </ul>
     </div>
+    <div class="sec-foot">
+      <a class="footlink" href="#gateway">↑ Back to top</a>
+      <a class="footlink" href="index.html">← Back to Blog</a>
+    </div>
   </section>
 
   <section class="part" id="whatsapp">
@@ -446,6 +455,10 @@ flowchart TD
         <li><strong>Failure containment:</strong> a failed <code>send()</code> logs and moves on — one bad message never kills the loop.</li>
         <li><strong>Mention gating:</strong> only @-mentions get a reply in groups, keeping it a helper, not a spammer.</li>
       </ul>
+    </div>
+    <div class="sec-foot">
+      <a class="footlink" href="#whatsapp">↑ Back to top</a>
+      <a class="footlink" href="index.html">← Back to Blog</a>
     </div>
   </section>
 
@@ -511,6 +524,10 @@ flowchart TD
         <li><strong>Zero cost by default:</strong> LLM is used only for genuine semantic merges.</li>
         <li><strong>Safe by design:</strong> dry-run preview + pinned-skills-untouched keep curation from destroying hand-written content.</li>
       </ul>
+    </div>
+    <div class="sec-foot">
+      <a class="footlink" href="#self">↑ Back to top</a>
+      <a class="footlink" href="index.html">← Back to Blog</a>
     </div>
   </section>
 
@@ -583,6 +600,10 @@ flowchart LR
         <li><strong>Concurrency fixed:</strong> the write path now reloads once and checks drift + parses on one snapshot, closing the clobber race.</li>
       </ul>
       <p style="color:var(--muted);font-size:14px;">This closes the 4-part series. Every <code>file:line</code> reference comes from the current <code>hermes-agent</code> source and can be used as a coordinate to read along.</p>
+    </div>
+    <div class="sec-foot">
+      <a class="footlink" href="#memory">↑ Back to top</a>
+      <a class="footlink" href="index.html">← Back to Blog</a>
     </div>
   </section>
 
