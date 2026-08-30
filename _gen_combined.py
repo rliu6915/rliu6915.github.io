@@ -76,16 +76,13 @@ def build(lang):
             '  <section class="part" id="%s">\n' % secid +
             '    <div class="eyebrow">%s</div>\n' % c['eyebrow'] +
             '    <h1>%s</h1>\n' % c['h1'] +
-            '    <p class="deck">%s</p>\n' % c['deck'] +
-            '    %s\n' % BYLINE +
             '    %s\n' % c['hero'] +
             '    <div data-od-id="body">\n%s\n    </div>\n' % c['body'] +
-            '    %s\n' % author +
             '  </section>\n\n'
         )
 
     langattr = 'zh-CN' if is_zh else 'en'
-    title = 'Hermes Agent 架构全景：从消息网关到长期记忆' if is_zh else 'Hermes Agent Architecture: From Message Gateway to Long-Term Memory'
+    title = 'Hermes Agent 架构全景：从消息网关到长期记忆' if is_zh else 'Hermes Agent Architecture: From Message Gateway to Long-Term Memory, dive into hermes agent'
     desc = ('四篇合一：消息网关、WhatsApp、自我进化、长期记忆——基于真实源码的架构深潜。'
             if is_zh else
             'All four parts in one: Message Gateway, WhatsApp, Self-Improving, and Long-Term Memory — a source-grounded architecture deep-dive.')
@@ -95,7 +92,7 @@ def build(lang):
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>%s — Daniel Liu</title>
+  <title>%s</title>
   <meta content="%s" name="description" />
   %s
   %s
