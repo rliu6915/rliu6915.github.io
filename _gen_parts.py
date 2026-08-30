@@ -668,7 +668,9 @@ for slug, langs in CONTENT.items():
         # strip the leading "part N of 4-part series" intro paragraph
         c = dict(c)
         c['body'] = re.sub(r"^\s*<p>.*?</p>\s*\n", "", c['body'], flags=re.S)
-        other = 'hermes-%s-zh.html' % slug if lang == 'en' else 'hermes-%s.html' % slug
+        FNAMES = {'gateway': 'hermes-gateway-p1'}
+        other_base = FNAMES.get(slug, 'hermes-%s' % slug)
+        other = '%s-zh.html' % other_base if lang == 'en' else '%s.html' % other_base
         lang_switch = ('Prefer 中文? <a href="%s">Read this article in 中文 &rarr;</a>' % other) if lang == 'en' \
                       else ('Read in English? <a href="%s">Read this article in English &rarr;</a>' % other)
         author = AUTHOR_EN if lang == 'en' else AUTHOR_ZH
@@ -757,7 +759,9 @@ for slug, langs in CONTENT.items():
         }
         for k, v in repl.items():
             html = html.replace(k, v)
-        fname = 'hermes-%s%s.html' % (slug, '' if lang == 'en' else '-zh')
+        FNAMES = {'gateway': 'hermes-gateway-p1'}  # fresh filename -> fresh CDN object (old build stuck)
+        base = FNAMES.get(slug, 'hermes-%s' % slug)
+        fname = '%s%s.html' % (base, '' if lang == 'en' else '-zh')
         open(os.path.join(out_dir, fname), 'w', encoding='utf-8').write(html)
         print('wrote', fname, len(html), 'bytes')
 

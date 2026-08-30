@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>长期记忆：事实落盘，会话进 FTS5 — Daniel Liu</title>
-  <meta content="两条记忆线：事实经 MemoryManager → Provider 落盘（最朴素的 MemoryStore 写 MEMORY.md），会话经 SessionDB + FTS5 支持跨会话检索。" name="description" />
+  <title>消息网关：把平台与 Agent 彻底解耦 — Daniel Liu</title>
+  <meta content="Hermes 如何把 20+ 聊天平台归一化成一条事件流——以及为什么 Gateway 承担协议复杂度，而 Agent 只跑一次对话循环。" name="description" />
   <link href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,600,600i,700,700i|Raleway:300,300i,400,400i,500,500i,600,600i,700,700i|Poppins:300,300i,400,400i,500,500i,600,600i,700,700i" rel="stylesheet">
   
   <meta charset="utf-8" />
@@ -279,9 +279,9 @@
       <a href="../index.html#projects">Projects</a>
       <a href="../index.html#skills">Skills</a>
     </nav>
-    <div class="eyebrow" data-od-id="headline">架构 &middot; 第 4 / 4 篇</div>
-    <h1 data-od-id="headline">长期记忆：事实落盘，会话进 FTS5</h1>
-    <p class="deck" data-od-id="headline">基于真实源码拆解 Hermes 的两条记忆线——写盘的事实记忆，与建全文索引、可跨会话检索的会话记忆。</p>
+    <div class="eyebrow" data-od-id="headline">架构 &middot; 第 1 / 4 篇</div>
+    <h1 data-od-id="headline">消息网关：把平台与 Agent 彻底解耦</h1>
+    <p class="deck" data-od-id="headline">基于真实源码：每个平台适配器共享的入口契约，以及 GatewayRunner 内部把"协议复杂度"挡在 agent 核心之外的两层结构。</p>
         <div class="byline">
       <div class="avatar">DL</div>
       <span>By Daniel Liu &middot; August 23, 2026 &middot; 8 min read</span>
@@ -289,69 +289,66 @@
         <figure class="hero-diagram">
       <pre class="mermaid">
 flowchart LR
-  F["Fact memory"] --> MM["MemoryManager → Provider"]
-  MM --> D["MEMORY.md on disk"]
-  S["Session memory"] --> DB["SessionDB (hermes_state.py)"]
-  DB --> FT["FTS5 index (messages_fts_cjk)"]
-  FT --> Q["session_search"]
+  U["User"] --> PA["Platform Adapters (WhatsApp, Telegram, ...)"]
+  PA --> GR["Gateway (orchestration, sessions, auth)"]
+  GR --> AG["AIAgent (one conversation loop)"]
+  AG --> GR
+  GR --> PA
+  PA --> U
       </pre>
-      <figcaption>两条线：事实落盘；会话建全文索引以支持跨会话检索。</figcaption>
+      <figcaption>核心分层：Agent 只管一次对话，所有平台复杂度都在 Gateway 与各适配器里。</figcaption>
     </figure>
     <div data-od-id="body">
-      <h2>事实记忆</h2>
-      <p>事实经 <code>MemoryManager → MemoryProvider</code>——后台线程、串行、去噪。最朴素的实现 <code>MemoryStore</code>（<code>tools/memory_tool.py:159</code>）通过 <code>save_to_disk()</code>（<code>:387</code>）把 <code>MEMORY.md</code> 直接落盘。方法本身很小；安全性在 <code>_write_file</code>：它用<strong>原子临时文件 + rename</strong>，并发读取者永远不会看到一个写一半的文件：</p>
-      <pre class="src"><code>def save_to_disk(self, target: str):
-    """Persist entries to the appropriate file. Called after every mutation."""
-    get_memory_dir().mkdir(parents=True, exist_ok=True)
-    self._write_file(self._path_for(target), self._entries_for(target))
+      <h2>入口契约</h2>
+      <p>每个平台适配器——Telegram、Discord、Slack、WhatsApp、Signal 等——都继承 <code>BasePlatformAdapter.handle_message(event)</code>（<code>gateway/platforms/base.py:6045</code>）。它的唯一职责是把平台原始消息<strong>归一化</strong>成 <code>MessageEvent</code>，交给 <code>GatewayRunner._handle_message</code>（<code>gateway/run.py:16462</code>）。这条归一化就是接缝：agent 从来看不到"Telegram 更新 vs WhatsApp webhook"的区别，它只看到 <code>MessageEvent</code>。</p>
+      <p>方法（节选）<strong>立刻 return</strong>：真正的处理被 spawn 成后台任务，好让消息能一边跑 agent 一边被新消息打断，而不是排在后面（<code>gateway/platforms/base.py:6045</code>）：</p>
+      <pre class="src"><code>async def handle_message(self, event: MessageEvent) -> None:
+    """Process an incoming message. Returns quickly by spawning
+    background tasks, so new messages can be processed even while an
+    agent is running (interruption support)."""
+    if not self._message_handler:
+        return
+    if event.allow_gateway_control:
+        coerce_plaintext_gateway_command(event)
+    # Telegram topic recovery（仅 DM 会话），然后派生 key
+    session_key = build_session_key(event.source, ...)
+    # ...随后 _process_message_background() 把这一轮脱离调用方 spawn 出去
+    # route into GatewayRunner._handle_message(event, session_key, ...)</code></pre>
+      <p>节选里藏着两个细节。其一，<code>build_session_key(event.source, ...)</code> 不只是对 chat id 做哈希——它还会并入 <code>group_sessions_per_user</code> 与 <code>thread_sessions_per_user</code>，于是群里可以按用户隔离会话、线程可以各自成会话。同一平台 + 同一会话 + 同一作用域永远算出同一个 key，这正是下一层"按会话路由"的依据。其二，spawn 才是"可打断"的真正来源：因为这一轮跑在后台任务里，新来的 <code>/stop</code> 或 <code>/new</code> 会绕过活跃会话锁、被内联派发，而不是漏进对话正文、也不会卡死在锁上。其三，最开头那行 <code>if not self._message_handler: return</code> 解释了为什么适配器可以先被实例化、注册，再接上正在运行的 GatewayRunner——在 handler 挂上之前，消息只是空转。</p>
 
-@staticmethod
-def _write_file(path: Path, entries: List[str]):
-    """Atomic temp-file + rename: readers see old OR new, never empty."""
-    content = ENTRY_DELIMITER.join(entries) if entries else ""
-    atomic_write_text(path, content, tmp_prefix=".mem_")</code></pre>
-      <p>这就是耐久的"我对用户已知什么"的存储。</p>
+      <h2>GatewayRunner 内部的两层</h2>
+      <p>GatewayRunner 分成<strong>会话路由层</strong>——按 <code>session_key</code> 找/建会话、取活跃会话锁、跑工具审批流——和 <strong>TurnRunner</strong>（<code>gateway/run.py:4291</code>，真正跑一轮 agent 循环、流式输出、把 tool 结果喂回去）。注意坐标：<code>TurnRunner</code> <em>类</em> 在 <code>:4291</code>；<code>:5348</code> 是它的一个方法（<code>run_sync</code>）。这套切分让"平台协议复杂度"和"agent 核心逻辑"互不污染。</p>
 
-      <h2>会话记忆</h2>
-      <p>另一条线是会话级的：<code>hermes_state.py</code> 用 FTS5 建全文索引，含 CJK 分词器 <code>messages_fts_cjk</code>（<code>:2685</code>）。这个索引是 <code>session_search</code> 的底座——能跨历史会话检索，而不只是单次会话内。</p>
-
-      <h2>并发下的安全写入</h2>
-      <p>朴素的 <code>MemoryStore</code> 曾有一个竞态：两次读文件中间夹一次写，可能静默覆盖外部编辑。修复是<strong>只重读一次</strong>目标，然后在<strong>同一份快照</strong>上同时做 drift 检测与解析——这样两次操作之间的外部写入不会被无察觉地覆盖。调用 <code>save_to_disk()</code> 的 <code>add()</code> 路径（<code>:414</code>）才露出真纪律：改动前<strong>在锁内重读磁盘</strong>、拒绝完全重复、若文件读成空（瞬时抖动，否则会清空所有历史记忆）则拒绝写：</p>
-      <pre class="src"><code>def add(self, target, content):
-    with self._file_lock(self._path_for(target)):
-        if self._reload_target(target, skip_drift=True) is _READ_FAILED:
-            return _read_failed_error(self._path_for(target))
-        ...
-        if content in entries:               # 拒绝完全重复
-            return self._success_response(target, "Entry already exists.")
-        if new_total > limit:                # 字符上限护栏
-            return self._consolidation_failure({...})
-        entries.append(content)
-        self._set_entries(target, entries)
-        self.save_to_disk(target)            # 耐久写入</code></pre>
+      <blockquote class="inline">设计直觉：Gateway 不是 agent 的"前端"，而是 agent 的"邮局"——它只负责把信（MessageEvent）正确投递、把回信（final_response）正确发出，绝不替 agent 思考。</blockquote>
 
       <figure class="diagram">
         <pre class="mermaid">
-flowchart LR
-  IN["Incoming memory op"] --> ADD{"add?"}
-  ADD -->|yes| AP["append (skip drift guard)"]
-  ADD -->|no| RE["replace / remove / apply_batch"]
-  RE --> DR["_reload_target(): read disk ONCE"]
-  DR --> DT["drift check + parse on SAME snapshot"]
-  DT -->|"drifted"| AB["abort change"]
-  DT -->|"clean"| W["write file"]
-  AP --> W
+flowchart TD
+  W["Webhook / inbox"] --> A["Adapter.handle_message()"]
+  A --> E["MessageEvent"]
+  E --> H["GatewayRunner._handle_message()"]
+  H --> S{"session_key resolved?"}
+  S -->|yes| L["acquire active-session lock"]
+  S -->|no| C["create session"]
+  C --> L
+  L --> T["TurnRunner (run.py:4291)"]
+  T --> AG["AIAgent loop"]
+  AG --> F["final_response"]
+  F --> H
+  H --> O["send() back to adapter"]
         </pre>
-        <figcaption>图 1 — 记忆写入的竞态防护。一次读盘、一份快照同时做 drift 检测 + 解析。</figcaption>
+        <figcaption>图 1 — 一条入站消息的路径：归一化、按会话路由、跑一轮、流式回传。适配器与 Gateway 包揽了 AIAgent 方框之外的一切。</figcaption>
       </figure>
+
+      <h2>为什么这个分层重要</h2>
+      <p>关键约束（来自 <code>AGENTS.md</code>）是 <strong>Per-conversation prompt caching is sacred</strong>：每轮对话复用缓存前缀，任何中途改动 system prompt 或 tool schema 都会让缓存失效、成本翻倍。因为 Gateway 管会话/作用域、agent 保持"纯一次对话循环"，同一个 agent 实例得以按会话复用而不改其上下文——缓存在 20+ 平台间都保得住。甚至还有自愈：若适配器持有一个会话的过期锁、而它的宿主任务早已退出（split-brain，issue #11016），它会清掉这把锁、落到常规派发，用户就不会卡在一把死锁后面。</p>
 
       <h2>小结</h2>
       <ul>
-        <li><strong>两条线：</strong>事实走 <code>MemoryManager → Provider</code>（落盘）；会话走 <code>SessionDB + FTS5</code>（检索）。</li>
-        <li><strong>FTS5 + CJK：</strong><code>messages_fts_cjk</code> 让 <code>session_search</code> 能跨会话检索，含中文。</li>
-        <li><strong>修过并发：</strong>写入路径现在只重读一次、在同一快照上做 drift 检测与解析，堵住了被覆盖的竞态。</li>
+        <li><strong>一个契约，多平台：</strong><code>BasePlatformAdapter.handle_message</code> 是唯一的接缝；适配器归一化，agent 对平台无感。</li>
+        <li><strong>内部两层：</strong>会话路由（解析/加锁/审批）与 TurnRunner（跑循环）——协议复杂度永不触及 agent 核心。<code>TurnRunner</code> 在 <code>run.py:4291</code>。</li>
+        <li><strong>分层是为了缓存：</strong>"纯一次对话循环"的 agent，才让 prompt caching 在 20+ 平台间不被破坏。</li>
       </ul>
-      <p style="color:var(--muted);font-size:14px;">本系列到此结束。文中所有 <code>file:line</code> 引用均来自 <code>hermes-agent</code> 当前源码，可作对照阅读的坐标。</p>
     </div>
         <div class="author">
       <div class="avatar">DL</div>
@@ -360,7 +357,7 @@ flowchart LR
         软件工程师，写 AI Agent、基础设施，以及把它们接进日常聊天软件的小工具。这个博客记录边做边学的东西。
       </div>
     </div>
-    <p class="lang-switch">Read in English? <a href="hermes-memory.html">Read this article in English &rarr;</a></p>
+    <p class="lang-switch">Read in English? <a href="hermes-gateway-p1.html">Read this article in English &rarr;</a></p>
   </article>
   <script>document.addEventListener("DOMContentLoaded", function(){ if(window.mermaid){ mermaid.initialize({startOnLoad:true, theme:"dark", themeVariables:{fontSize:"15px"}}); } });</script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
