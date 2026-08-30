@@ -477,12 +477,25 @@ flowchart LR
     </figure>
     <div data-od-id="body">
       <h2>"自我进化"到底指什么</h2>
-      <p>Hermes 的自我进化<strong>不是</strong>让模型在线改自己的源码，而是把<strong>可复用的经验固化为 skill</strong>——<code>SKILL.md</code> 形式的流程知识——再由后台 <strong>Curator</strong> 维护这套收藏的健康度。agent 是通过积累经过把关的 playbook 变聪明，而不是靠重写自己。</p>
+      <p>Hermes 的自我进化<strong>不是</strong>让模型在线改自己的源码，而是经由<strong>两个相互独立的工具</strong>发生两件事：</p>
+      <ul>
+        <li><strong>程序性记忆 &rarr; skill。</strong>当 agent 摸索出一种可复用的做法，它调 <code>skill_manage(action="create")</code>，把一个 <code>SKILL.md</code> 写进 <code>~/.hermes/skills/</code>。skill 是窄而可执行的——"怎么做 X"。</li>
+        <li><strong>陈述性记忆 &rarr; MEMORY.md / USER.md。</strong>当 agent 学到一条事实、一条用户偏好或一个环境细节，它调 <code>memory</code> 工具，追加到 <code>MEMORY.md</code>（观察）或 <code>USER.md</code>（用户）。这是宽泛而陈述性的——"什么是真的"。</li>
+      </ul>
+      <p>agent 是通过同时积累两者变聪明的：经过把关的 playbook<em>加上</em>一份关于用户和世界的持久事实记录。它既不改写自己，也不改写核心代码。</p>
 
-      <blockquote class="pull">"Self-Improving 不是让 agent 改自己的代码，而是把经验固化为 skill。"</blockquote>
+      <blockquote class="pull">"Self-Improving 不是让 agent 改自己的代码，而是把经验固化为 skill、把事实写进记忆——通过两个独立的工具。"</blockquote>
 
-      <h2>Curator 状态机</h2>
-      <p><code>agent/curator.py</code> 的 <code>run_curator_review</code>（<code>:1511</code>）是一个<strong>纯函数状态机</strong>：扫描现有 skill、判断该合并/归档/更新，可选调用 LLM 做"语义合并"。函数签名露出它的旋钮：同步/守护进程选择、dry-run 只报告不改动、<code>consolidate</code> 开关门控 LLM 合并：</p>
+      <h2>怎么触发：nudge 计数器</h2>
+      <p>两个工具都不会自己跑——由模型决定。但 Hermes 在后台跑两个 <strong>nudge 计数器</strong>，定期 fork 一个 review agent 去读最近的对话、判断什么值得存：</p>
+      <ul>
+        <li><strong>Skill nudge</strong> 计<em>工具调用迭代轮数</em>。在 <code>agent/conversation_loop.py:2026</code> 里计数器 <code>_iters_since_skill</code> 每轮 +1；在 <code>agent/turn_finalizer.py:772</code> 里当 <code>&gt;= agent._skill_nudge_interval</code> 时触发。默认间隔是 <strong>10</strong>（<code>agent/agent_init.py:1956</code>），取自 <code>skills.creation_nudge_interval</code>。</li>
+        <li><strong>Memory nudge</strong> 计<em>user turn 数</em>。在 <code>agent/turn_context.py:714</code> 里计数器 <code>_turns_since_memory</code> 每个 turn +1；到达 <code>&gt;= agent._memory_nudge_interval</code> 时触发。默认同样是 <strong>10</strong>（<code>agent/agent_init.py:1827</code>），取自 <code>memory.nudge_interval</code>。</li>
+      </ul>
+      <p>两个阈值都只是<em>唤起一个后台 review agent</em>（prompt：skill 在 <code>agent/background_review.py:412</code>，memory 在 <code>:401</code>）。那个 fork 出来的 agent 读对话、自己决定要不要真的调 <code>skill_manage</code> 或 <code>memory</code>。计数到了并不会自己写文件。用了任一工具就把自己这条计数器清零（<code>agent/tool_executor.py:689-692</code>）。</p>
+
+      <h2>Curator：后来加的 skill 运维层</h2>
+      <p>skill 会被不断创建，自然就有一个问题：谁保证这套收藏不腐烂？那就是 <strong>Curator</strong>（<code>agent/curator.py</code>，2026-04-26 加入——<em>晚于</em> <code>skill_manage</code> 本身，2026-02-19）。它<strong>不是</strong>自我进化，而是架在上面的维护层：一个后台任务，把不用的 skill 按 active&rarr;stale&rarr;archived 老化，并在可选时把窄 sibling 合并成 class-level 的"umbrella" skill。入口 <code>run_curator_review</code>（<code>:1511</code>）是一个<strong>纯函数状态机</strong>：</p>
       <pre class="src"><code>def run_curator_review(
     on_summary=None, synchronous=False,
     dry_run=False, consolidate=None) -> Dict[str, Any]:
@@ -501,6 +514,7 @@ flowchart LR
         <li><strong>默认零 LLM 成本</strong>——状态机本身不调模型，只有在真正需要语义判断时才花 token。</li>
         <li><strong>dry-run 可预演</strong>——先打印"将要做什么"，确认无误再落盘。</li>
         <li><strong>pinned skill 永不动</strong>——被显式钉住的 skill 跳过所有自动化，策展不会冲掉人工精心写的内容。</li>
+        <li><strong>只管 skill</strong>——Curator 只维护 agent 创建的 skill，从不碰记忆文件。</li>
       </ol>
 
       <figure class="diagram">
@@ -519,10 +533,10 @@ flowchart TD
 
       <h2>小结</h2>
       <ul>
-        <li><strong>不是自我改写：</strong>模型从不去改 agent 代码，它产出的是 skill。</li>
-        <li><strong>纯函数 curtor：</strong><code>run_curator_review</code> 确定且可测。</li>
-        <li><strong>默认零成本：</strong>只有真正的语义合并才用 LLM。</li>
-        <li><strong>设计即安全：</strong>dry-run 预演 + pinned 不动，策展不会毁掉手写内容。</li>
+        <li><strong>不是自我改写：</strong>模型从不去改 agent 代码，它通过两个独立工具产出 skill 和记忆。</li>
+        <li><strong>两个工具，解耦：</strong><code>skill_manage</code> 写程序性的 <code>SKILL.md</code>；<code>memory</code> 写陈述性的 <code>MEMORY.md</code> / <code>USER.md</code>。创建 skill 不会自动写记忆。</li>
+        <li><strong>靠 nudge，不靠自发：</strong>skill nudge（10 轮工具迭代）与 memory nudge（10 个 user turn）唤起后台 review agent 来决定存什么。</li>
+        <li><strong>Curator 是运维，不是核心：</strong>后加的，只维护 agent 创建的 skill——合并/老化/归档——从不碰记忆。</li>
       </ul>
     </div>
     <div class="sec-foot">
