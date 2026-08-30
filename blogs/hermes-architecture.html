@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Hermes Agent Architecture: From Message Gateway to Long-Term Memory, dive into hermes agent</title>
+  <title>Deep Dive into Hermes Agent</title>
   <meta content="All four parts in one: Message Gateway, WhatsApp, Self-Improving, and Long-Term Memory — a source-grounded architecture deep-dive." name="description" />
   <link href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,600,600i,700,700i|Raleway:300,300i,400,400i,500,500i,600,600i,700,700i|Poppins:300,300i,400,400i,500,500i,600,600i,700,700i" rel="stylesheet">
   
@@ -275,6 +275,11 @@
       box-shadow: 0 1px 0 rgba(0,0,0,.04); }
     .optbar-inner { max-width: 740px; margin: 0 auto; padding: 10px 22px;
       display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+    .opt-left { display: flex; align-items: center; gap: 10px; }
+    .backlink { font-family: Raleway, system-ui, sans-serif; font-size: 13px; font-weight: 600;
+      color: var(--muted); text-decoration: none; padding: 5px 11px; border-radius: 7px;
+      border: 1px solid var(--border); transition: all .15s; white-space: nowrap; }
+    .backlink:hover { color: var(--accent); border-color: var(--accent); }
     .parts { display: flex; gap: 4px; flex-wrap: wrap; }
     .parts a { font-family: Raleway, system-ui, sans-serif; font-size: 13px; font-weight: 600;
       color: var(--muted); text-decoration: none; padding: 5px 11px; border-radius: 7px;
@@ -298,12 +303,15 @@
 <body>
   <div class="optbar">
     <div class="optbar-inner">
-      <nav class="parts">
+      <div class="opt-left">
+        <a class="backlink" href="index.html">← Blog</a>
+        <nav class="parts">
       <a href="#gateway" data-sec="gateway">1 · Gateway</a>
       <a href="#whatsapp" data-sec="whatsapp">2 · WhatsApp</a>
       <a href="#self" data-sec="self">3 · Self-Improving</a>
       <a href="#memory" data-sec="memory">4 · Memory</a>
             </nav>
+      </div>
       <a class="langtoggle" href="hermes-architecture-zh.html">中文</a>
     </div>
   </div>

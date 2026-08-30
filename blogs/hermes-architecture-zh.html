@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Hermes Agent 架构全景：从消息网关到长期记忆</title>
+  <title>Hermes Agent 架构深潜</title>
   <meta content="四篇合一：消息网关、WhatsApp、自我进化、长期记忆——基于真实源码的架构深潜。" name="description" />
   <link href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,600,600i,700,700i|Raleway:300,300i,400,400i,500,500i,600,600i,700,700i|Poppins:300,300i,400,400i,500,500i,600,600i,700,700i" rel="stylesheet">
   
@@ -275,6 +275,11 @@
       box-shadow: 0 1px 0 rgba(0,0,0,.04); }
     .optbar-inner { max-width: 740px; margin: 0 auto; padding: 10px 22px;
       display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+    .opt-left { display: flex; align-items: center; gap: 10px; }
+    .backlink { font-family: Raleway, system-ui, sans-serif; font-size: 13px; font-weight: 600;
+      color: var(--muted); text-decoration: none; padding: 5px 11px; border-radius: 7px;
+      border: 1px solid var(--border); transition: all .15s; white-space: nowrap; }
+    .backlink:hover { color: var(--accent); border-color: var(--accent); }
     .parts { display: flex; gap: 4px; flex-wrap: wrap; }
     .parts a { font-family: Raleway, system-ui, sans-serif; font-size: 13px; font-weight: 600;
       color: var(--muted); text-decoration: none; padding: 5px 11px; border-radius: 7px;
@@ -298,12 +303,15 @@
 <body>
   <div class="optbar">
     <div class="optbar-inner">
-      <nav class="parts">
+      <div class="opt-left">
+        <a class="backlink" href="index.html">← 博客</a>
+        <nav class="parts">
       <a href="#gateway" data-sec="gateway">1 · Gateway</a>
       <a href="#whatsapp" data-sec="whatsapp">2 · WhatsApp</a>
       <a href="#self" data-sec="self">3 · Self-Improving</a>
       <a href="#memory" data-sec="memory">4 · Memory</a>
             </nav>
+      </div>
       <a class="langtoggle" href="hermes-architecture.html">EN</a>
     </div>
   </div>

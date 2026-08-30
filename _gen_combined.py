@@ -27,6 +27,11 @@ COMBINED_CSS = """
       box-shadow: 0 1px 0 rgba(0,0,0,.04); }
     .optbar-inner { max-width: 740px; margin: 0 auto; padding: 10px 22px;
       display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+    .opt-left { display: flex; align-items: center; gap: 10px; }
+    .backlink { font-family: Raleway, system-ui, sans-serif; font-size: 13px; font-weight: 600;
+      color: var(--muted); text-decoration: none; padding: 5px 11px; border-radius: 7px;
+      border: 1px solid var(--border); transition: all .15s; white-space: nowrap; }
+    .backlink:hover { color: var(--accent); border-color: var(--accent); }
     .parts { display: flex; gap: 4px; flex-wrap: wrap; }
     .parts a { font-family: Raleway, system-ui, sans-serif; font-size: 13px; font-weight: 600;
       color: var(--muted); text-decoration: none; padding: 5px 11px; border-radius: 7px;
@@ -57,10 +62,15 @@ def build(lang):
     parts_html = ''
     for slug, secid, label in PARTS:
         parts_html += '<a href="#%s" data-sec="%s">%s</a>\n      ' % (secid, secid, label)
+    blog_index = 'index.html' if lang == 'en' else 'index.html'
+    back_label = '← Blog' if lang == 'en' else '← 博客'
     optbar = (
         '  <div class="optbar">\n'
         '    <div class="optbar-inner">\n'
-        '      <nav class="parts">\n      ' + parts_html + '      </nav>\n'
+        '      <div class="opt-left">\n'
+        '        <a class="backlink" href="%s">%s</a>\n' % (blog_index, back_label) +
+        '        <nav class="parts">\n      ' + parts_html + '      </nav>\n'
+        '      </div>\n'
         '      <a class="langtoggle" href="%s">%s</a>\n' % (other_page, lang_label) +
         '    </div>\n'
         '  </div>'
@@ -82,7 +92,7 @@ def build(lang):
         )
 
     langattr = 'zh-CN' if is_zh else 'en'
-    title = 'Hermes Agent 架构全景：从消息网关到长期记忆' if is_zh else 'Hermes Agent Architecture: From Message Gateway to Long-Term Memory, dive into hermes agent'
+    title = 'Hermes Agent 架构深潜' if is_zh else 'Deep Dive into Hermes Agent'
     desc = ('四篇合一：消息网关、WhatsApp、自我进化、长期记忆——基于真实源码的架构深潜。'
             if is_zh else
             'All four parts in one: Message Gateway, WhatsApp, Self-Improving, and Long-Term Memory — a source-grounded architecture deep-dive.')
