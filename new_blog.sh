@@ -93,9 +93,10 @@ cat > "$file" <<HTML
       <nav class="nav-menu d-none d-lg-block">
         <ul>
           <li><a href="../index.html"> <span>Home</span></a></li>
+          <li><a href="../index.html#about"> <span>About</span></a></li>
           <li class="active"><a href="index.html"> <span>Blog</span></a></li>
           <li><a href="../index.html#projects"> <span>Projects</span></a></li>
-          <li><a href="../index.html#skills"> <span>Skills</span></a></li>
+          <li><a href="../index.html#toy-projects"> <span>Toy Projects</span></a></li>
         </ul>
       </nav>
       <div class="social-links">
