@@ -8,7 +8,18 @@
   "use strict";
 
   function normalizeHash(hash) {
-    return hash === '#education' ? '#about' : hash;
+    if (hash === '#education') {
+      return '#about';
+    }
+    return hash;
+  }
+
+  function redirectLegacyBlogHash() {
+    if (window.location.hash === '#blog') {
+      window.location.replace('blogs/index.html');
+      return true;
+    }
+    return false;
   }
 
   function showPortfolioSection(hash) {
@@ -59,8 +70,15 @@
   });
 
   $(window).on('hashchange', function() {
+    if (redirectLegacyBlogHash()) {
+      return;
+    }
     navigateToHash(window.location.hash, true);
   });
+
+  if (redirectLegacyBlogHash()) {
+    return;
+  }
 
   // Default landing is About; other hashes open their section
   var initialHash = window.location.hash;
