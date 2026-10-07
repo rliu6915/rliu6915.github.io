@@ -49,9 +49,10 @@ HLJS_JS = """    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.j
 NAV = """    <nav class="top">
       <span class="wordmark">Daniel Liu</span>
       <a href="../index.html">Home</a>
+      <a href="../index.html#about">About</a>
       <a href="index.html" class="active">Blog</a>
       <a href="../index.html#projects">Projects</a>
-      <a href="../index.html#skills">Skills</a>
+      <a href="../index.html#toy-projects">Toy Projects</a>
     </nav>"""
 
 BYLINE = """    <div class="byline">
