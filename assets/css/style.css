@@ -18,12 +18,13 @@ body {
 body::before {
   content: "";
   position: fixed;
-  background: #010e1b;
+  background: linear-gradient(165deg, #010e1b 0%, #0c1a2e 50%, #061018 100%);
   background-size: cover;
   left: 0;
   right: 0;
   top: 0;
   height: 100vh;
+  z-index: -1;
 }
 
 @media (min-width: 1024px) {
@@ -424,6 +425,69 @@ section .container {
 
 .about-me .content p:last-child {
   margin-bottom: 0;
+}
+
+.about-avatar-card {
+  display: block;
+  max-width: 320px;
+  margin: 0 auto;
+  padding: 1.75rem 1.5rem;
+  text-align: center;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(18, 214, 64, 0.25);
+  border-radius: 12px;
+  transition: border-color 0.25s ease, background 0.25s ease, transform 0.25s ease;
+}
+
+.about-avatar-card:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(18, 214, 64, 0.55);
+  transform: translateY(-2px);
+}
+
+.about-avatar-card__portrait {
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  object-fit: cover;
+  margin: 0 auto 1rem;
+  display: block;
+  border: 3px solid rgba(18, 214, 64, 0.35);
+  pointer-events: none;
+}
+
+.about-avatar-card__name {
+  display: block;
+  font-family: "Raleway", sans-serif;
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.about-avatar-card__tagline {
+  display: block;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.75);
+  margin-bottom: 1rem;
+}
+
+.about-avatar-card__cta {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #12d640;
+}
+
+.about-avatar-card__cta i {
+  font-size: 0.85rem;
+  vertical-align: middle;
+}
+
+.about-avatar-card:hover .about-avatar-card__cta {
+  color: #35e888;
 }
 
 /*--------------------------------------------------------------
