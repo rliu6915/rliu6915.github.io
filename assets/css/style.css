@@ -437,10 +437,6 @@ section .container {
   line-height: 1.4;
 }
 
-.about .education {
-  padding-top: 0;
-}
-
 .about-avatar-card {
   display: block;
   max-width: 320px;

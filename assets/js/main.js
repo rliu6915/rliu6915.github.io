@@ -7,8 +7,12 @@
 !(function($) {
   "use strict";
 
+  function normalizeHash(hash) {
+    return hash === '#education' ? '#about' : hash;
+  }
+
   function showPortfolioSection(hash) {
-    var sectionHash = hash === '#education' ? '#about' : hash;
+    var sectionHash = normalizeHash(hash);
     var $section = $(sectionHash);
     if (!$section.length || !$section.is('section')) {
       return;
@@ -19,14 +23,14 @@
   }
 
   function setActiveNav(hash) {
-    var navHash = hash === '#education' ? '#about' : hash;
+    var navHash = normalizeHash(hash);
     $('.nav-menu .active, .mobile-nav .active').removeClass('active');
     $('.nav-menu, .mobile-nav').find('a[href="' + navHash + '"]').parent('li').addClass('active');
   }
 
   function navigateToHash(hash, updateNav) {
     var sectionHash = hash || '#about';
-    var $target = $(sectionHash === '#education' ? '#about' : sectionHash);
+    var $target = $(normalizeHash(sectionHash));
     if (!$target.length) {
       return;
     }
@@ -40,7 +44,7 @@
   $(document).on('click', '.nav-menu a, .mobile-nav a, #header h1 a', function(e) {
     if (location.pathname.replace(/^\//, '') == this.pathname.replace(/^\//, '') && location.hostname == this.hostname) {
       var hash = this.hash || '#about';
-      var target = $(hash === '#education' ? '#about' : hash);
+      var target = $(normalizeHash(hash));
       if (target.length) {
         e.preventDefault();
         navigateToHash(hash, $(this).parents('.nav-menu, .mobile-nav').length);
@@ -60,7 +64,8 @@
 
   // Default landing is About; other hashes open their section
   var initialHash = window.location.hash;
-  if (initialHash && initialHash !== '#about' && $(initialHash).is('section')) {
+  var normalizedInitial = normalizeHash(initialHash);
+  if (initialHash && normalizedInitial !== '#about' && $(normalizedInitial).is('section')) {
     navigateToHash(initialHash, true);
   } else {
     navigateToHash('#about', true);
