@@ -368,19 +368,33 @@ flowchart TD
     </div>
     <p class="lang-switch">Read in English? <a href="hermes-gateway-p1.html">Read this article in English &rarr;</a></p>
   </article>
+  <div class="zoom-overlay" id="zoomOverlay" aria-hidden="true"></div>
   <script>
-    document.querySelectorAll('.mermaid').forEach(function(el){
-      el.addEventListener('click', function(){
-        var svg = el.querySelector('svg'); if(!svg) return;
-        var overlay = document.getElementById('zoomOverlay');
-        overlay.innerHTML = ''; overlay.appendChild(svg.cloneNode(true));
-        overlay.classList.add('open');
+    (function () {
+      var zoomOverlay = document.getElementById('zoomOverlay');
+      if (!zoomOverlay) return;
+      function closeZoom() {
+        zoomOverlay.classList.remove('open');
+        zoomOverlay.innerHTML = '';
+        zoomOverlay.setAttribute('aria-hidden', 'true');
+      }
+      document.querySelectorAll('.mermaid').forEach(function (el) {
+        el.addEventListener('click', function () {
+          var svg = el.querySelector('svg');
+          if (!svg) return;
+          zoomOverlay.innerHTML = '';
+          zoomOverlay.appendChild(svg.cloneNode(true));
+          zoomOverlay.classList.add('open');
+          zoomOverlay.setAttribute('aria-hidden', 'false');
+        });
       });
-    });
-    var zoomOverlay = document.getElementById('zoomOverlay');
-    zoomOverlay.addEventListener('click', function(){ this.classList.remove('open'); this.innerHTML=''; });
-    document.addEventListener('keydown', function(e){ if(e.key==='Escape'){ zoomOverlay.classList.remove('open'); zoomOverlay.innerHTML=''; } });
+      zoomOverlay.addEventListener('click', closeZoom);
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') closeZoom();
+      });
+    })();
   </script>
+
       <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <script>document.addEventListener('DOMContentLoaded', function () { if (window.hljs) hljs.highlightAll(); });</script>
   <script>

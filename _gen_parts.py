@@ -2,9 +2,10 @@
 # -*- coding: utf-8 -*-
 import io, os, re
 
+from _blog_zoom import ZOOM_SNIPPET as ZOOM
+
 STYLE = open('/tmp/_style.css', encoding='utf-8').read()
 HEAD  = open('/tmp/_head_script.html', encoding='utf-8').read()
-ZOOM  = open('/tmp/_zoom_script.html', encoding='utf-8').read()
 
 FONTS = '<link href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,600,600i,700,700i|Raleway:300,300i,400,400i,500,500i,600,600i,700,700i|Poppins:300,300i,400,400i,500,500i,600,600i,700,700i" rel="stylesheet">'
 
