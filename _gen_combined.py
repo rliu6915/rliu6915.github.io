@@ -8,6 +8,7 @@ import io, os, re
 STYLE = open('/tmp/_style.css', encoding='utf-8').read()
 HEAD  = open('/tmp/_head_script.html', encoding='utf-8').read()
 
+from _blog_zoom import ZOOM_CSS, ZOOM_SNIPPET
 from _gen_parts import (CONTENT, FONTS, HLJS_CSS, HLJS_JS, SERIES_CSS, SRC_CSS,
                         BYLINE, AUTHOR_EN, AUTHOR_ZH)
 
@@ -132,11 +133,12 @@ def build(lang):
   %s
   %s
   %s
-  <style>%s%s%s%s</style>
+  <style>%s%s%s%s%s</style>
 </head>
 <body>
   <article class="wrap">
 %s%s  </article>
+%s
   %s
   <script>
     (function () {
@@ -184,8 +186,8 @@ def build(lang):
 </body>
 </html>
 """ % (langattr, title, desc, FONTS, HEAD, HLJS_CSS,
-       STYLE, SERIES_CSS, SRC_CSS, COMBINED_CSS,
-       toc, sections, HLJS_JS)
+       STYLE, SERIES_CSS, SRC_CSS, COMBINED_CSS, ZOOM_CSS,
+       toc, sections, ZOOM_SNIPPET, HLJS_JS)
 
     fname = 'hermes-architecture%s.html' % ('' if lang == 'en' else '-zh')
     open(os.path.join('blogs', fname), 'w', encoding='utf-8').write(html)
