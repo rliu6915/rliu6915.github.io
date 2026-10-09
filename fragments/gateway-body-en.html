@@ -1,0 +1,110 @@
+      <h2 id="entry-contract">The entry contract</h2>
+      <p>Every platform adapter — Telegram, Discord, Slack, WhatsApp, Signal, and the rest — funnels through one method: <code>BasePlatformAdapter.handle_message</code> in <code>gateway/platforms/base.py</code>. Its job is to <strong>normalize</strong> whatever the platform handed you into a <code>MessageEvent</code> and forward it to <code>GatewayRunner._handle_message</code>. The agent never sees “Telegram update” versus “WhatsApp webhook”; it only sees a typed event stream. The <a class="inline" href="https://hermes-agent.nousresearch.com/docs/developer-guide/gateway-internals">Gateway internals</a> doc maps the surrounding files; this chapter follows one message through the parts that matter for operators and contributors.</p>
+      <p>The handler returns <strong>immediately</strong>: adapters spawn the real turn in a background task so inbound webhooks do not block and control commands can still reach the runner while a model turn is in flight.</p>
+      <pre class="src"><code>async def handle_message(self, event: MessageEvent) -&gt; None:
+    if not self._message_handler:
+        return
+    if event.allow_gateway_control:
+        coerce_plaintext_gateway_command(event)
+    session_key = build_session_key(event.source, ...)
+    # ... _process_message_background() -&gt; GatewayRunner._handle_message(...)</code></pre>
+      <p>Three behaviors worth naming explicitly (not “two details … third …”). <strong>Early return</strong> when <code>_message_handler</code> is unset lets adapters register before the runner wires up — messages no-op until the handler exists. <strong>Gateway commands</strong> in plain text are coerced when <code>allow_gateway_control</code> is true, so <code>/stop</code> and friends work even on platforms without native slash commands. <strong>Background spawn</strong> is what makes the dual-layer busy guard possible: the adapter can queue or interrupt without deadlocking the webhook thread.</p>
+
+      <h2 id="session-key">Session key</h2>
+      <p>Before authorization or model work, the adapter derives a <code>session_key</code> with <code>build_session_key()</code> in <code>gateway/session.py</code> — the <strong>only</strong> supported way to name a conversation lane. Never concatenate IDs by hand; multiplexing, threads, and per-user group isolation all live in that function.</p>
+      <p>Layout (default profile namespace <code>main</code>):</p>
+      <pre class="src"><code>agent:{namespace}:{platform}:{chat_type}[:{scope_id}][:{chat_id}][:{thread_id}][:{participant_id}]</code></pre>
+      <p>Examples: <code>agent:main:telegram:dm:123456789</code> for a DM; <code>agent:main:slack:group:C012345:U987654</code> when <code>group_sessions_per_user</code> isolates speakers in a channel. Slack inserts <code>scope_id</code> (workspace) before chat ids; WhatsApp DMs canonicalize phone identifiers; Discord thread continuity can normalize <code>chat_type</code> to <code>thread</code> so follow-ups byte-match the same key.</p>
+      <p>Two knobs from config flow into every call:</p>
+      <ul>
+        <li><code>group_sessions_per_user</code> (default on) — in groups, append the sender so each human gets a private agent lane unless you intentionally share one session.</li>
+        <li><code>thread_sessions_per_user</code> (default off) — forum topics, Discord threads, and Slack threads stay <em>shared</em> across participants unless you opt into per-user thread lanes.</li>
+      </ul>
+      <p>The same triple (platform, chat, scope) always yields the same key. That stability is what lets the gateway cache agents, persist sessions, and attach prompt-cache breakpoints per lane. See <a class="inline" href="https://hermes-agent.nousresearch.com/docs/developer-guide/gateway-session-lifecycle">Gateway session lifecycle</a> for <code>SessionStore</code>, <code>session_id</code> rotation, and housekeeping that does <em>not</em> change the key.</p>
+
+      <h2 id="authorization">Authorization</h2>
+      <p>After the key is known, <code>GatewayRunner</code> evaluates whether this sender may talk to the bot. Checks run in order (first match wins toward allow); anything unmatched falls through to <strong>deny</strong>:</p>
+      <ol>
+        <li>Per-platform allow-all (e.g. <code>TELEGRAM_ALLOW_ALL_USERS</code>)</li>
+        <li>Per-platform allowlist (e.g. <code>TELEGRAM_ALLOWED_USERS</code>)</li>
+        <li><strong>DM pairing</strong> — an already-authorized user runs <code>/pair</code>, shares the code, the newcomer sends it; state persists in <code>gateway/pairing.py</code> across restarts</li>
+        <li>Global allow-all (<code>GATEWAY_ALLOW_ALL_USERS</code> / <code>gateway.allow_all_users</code> in config)</li>
+        <li>Default: reject with no agent turn</li>
+      </ol>
+      <p>Pairing is the escape hatch for DMs on platforms where you cannot pre-seed an employee ID list: the bot stays closed by default, but trusted users can onboard one person at a time without editing env files. For production group bots you typically combine allowlists with mention gating (platform-specific), not pairing.</p>
+
+      <h2 id="pipeline">GatewayRunner pipeline</h2>
+      <p><code>GatewayRunner</code> in <code>gateway/run.py</code> is a facade over mixins (<code>run_inbound.py</code>, <code>run_turn.py</code>, <code>run_busy.py</code>, <code>run_agent_cache.py</code>, …). For a normal user message the inbound path is:</p>
+      <figure class="diagram">
+        <pre class="mermaid">
+flowchart TD
+  E["MessageEvent + session_key"] --> K["Resolve session / SessionStore"]
+  K --> A{"Authorized?"}
+  A -->|no| X["Reject"]
+  A -->|yes| S{"Slash command?"}
+  S -->|yes| C["Command handler table"]
+  S -->|no| B{"Agent running?"}
+  B -->|yes| G["Busy guard: interrupt / queue / steer"]
+  B -->|no| T["TurnRunner: one AIAgent loop"]
+  T --> D["Outbound send + delivery ledger"]
+        </pre>
+        <figcaption>Figure 1 — GatewayRunner decision order: key and auth before slash routing; busy handling before starting another full turn.</figcaption>
+      </figure>
+      <p><strong>TurnRunner</strong> owns the agent core: load history for this <code>session_key</code>, run tool approval if needed, stream one conversation loop, return <code>final_response</code>. Protocol adapters never import agent tools; the runner never parses Telegram JSON. That split is what keeps twenty platforms from forking the agent.</p>
+      <blockquote class="inline">Design intuition: the Gateway is not the agent’s “frontend” — it is the agent’s post office. It delivers the letter (<code>MessageEvent</code>) and sends the reply; it does not think for the agent.</blockquote>
+
+      <h2 id="dual-layer-guard">Dual-layer guard, interrupt, and queue</h2>
+      <p>When a turn is already running, Hermes uses <strong>two sequential guards</strong> (documented as “Two-Level Message Guard” in <a class="inline" href="https://hermes-agent.nousresearch.com/docs/developer-guide/gateway-internals">gateway internals</a>):</p>
+      <figure class="diagram">
+        <pre class="mermaid">
+flowchart TD
+  M["New inbound message"] --> L1{"L1: adapter _active_sessions?"}
+  L1 -->|busy| P["Queue in _pending_messages + interrupt event"]
+  L1 -->|idle or bypass cmd| L2["GatewayRunner._handle_message"]
+  P --> L2
+  L2 --> R{"L2: session in _running_agents?"}
+  R -->|bypass| I["Inline dispatch: /stop /new /queue /status /approve /deny"]
+  R -->|busy + normal text| INT["running_agent.interrupt() or queue/steer"]
+        </pre>
+        <figcaption>Figure 2 — Level 1 catches traffic at the adapter; Level 2 routes slash commands and applies <code>busy_input_mode</code> policy.</figcaption>
+      </figure>
+      <p><strong>Level 1</strong> (<code>gateway/platforms/base.py</code>): if the session is active, the message lands in <code>_pending_messages</code> and an interrupt event wakes the in-flight turn. <strong>Level 2</strong> (<code>gateway/run_inbound.py</code> + <code>run_busy.py</code>): <code>_running_agents</code> tracks the live <code>AIAgent</code>. Bypass commands must reach the runner synchronously — they are dispatched with <code>await self._message_handler(event)</code> instead of another background task, avoiding races with tool approval.</p>
+      <p><code>busy_input_mode</code> (gateway config) decides what a <em>non-command</em> message does while busy:</p>
+      <ul>
+        <li><code>interrupt</code> (common default) — call <code>interrupt()</code> on the running agent so the new user text becomes the next steering input; pending text can be dropped on gateway restart.</li>
+        <li><code>queue</code> — append to a FIFO per session (<code>/queue</code> items plus overflow in session state); survives restart when drain-on-shutdown is enabled.</li>
+        <li><code>steer</code> — like interrupt but routes through <code>running_agent.steer()</code>, including fan-out to active subagents where delegation would make a blunt interrupt unsafe.</li>
+      </ul>
+      <p>Operators feel this as: send a long task, paste a correction — interrupt mode pivots the turn; queue mode lets you stack messages and inspect depth with <code>/queue</code>; <code>/stop</code> always hard-stops regardless of mode. Compression locks and active subagents can demote interrupt to queue automatically so you do not orphan a parent-session rotation mid-compaction.</p>
+
+      <h2 id="delivery-ledger">Delivery ledger</h2>
+      <p>Generating a reply is not the same as the user receiving it. <code>gateway/delivery_ledger.py</code> records a durable <strong>delivery obligation</strong> in <code>state.db</code> around each final outbound send (see <a class="inline" href="https://hermes-agent.nousresearch.com/docs/user-guide/messaging/">Messaging</a>):</p>
+      <ul>
+        <li><code>record_obligation()</code> — <code>pending</code> before the first platform <code>send</code></li>
+        <li><code>mark_attempting()</code> — immediately before the await</li>
+        <li><code>mark_delivered()</code> / <code>mark_failed()</code> — only after a definitive <code>SendResult</code></li>
+      </ul>
+      <p>Semantics are <strong>at-least-once</strong>. If the gateway dies after the model finishes but before WhatsApp acknowledges, the next boot’s <code>sweep_recoverable()</code> claims rows whose owner process is gone and redelivers the stored text instead of re-running the whole turn (and paying for inference again). A live-process retry sweep handles transient <code>failed</code> rows with backoff (30s / 2m / 10m). Recovery responses may carry a prefix warning when the wire outcome was ambiguous — the ledger would rather surface a possible duplicate than silently lose an answer. Ephemeral slash replies and empty bodies skip the ledger; opt out with <code>gateway.delivery_ledger: false</code> if you accept crash loss.</p>
+
+      <h2 id="circuit-breaker">Circuit breaker</h2>
+      <p>Each platform adapter sits behind a <strong>circuit breaker</strong>. Repeated retryable failures — disconnects, rate limits, upstream 5xx — trip the breaker: the adapter pauses, logs a structured trip event, and can notify the home channel. Unlike the delivery ledger (which retries obligations), the breaker does <strong>not</strong> auto-heal; you clear it with <code>/platform resume &lt;platform&gt;</code> once the provider is healthy again. That prevents a sustained outage from reconnect thrash. Use <code>/platform list</code> and gateway logs (<code>circuit breaker</code>, <code>paused</code>) to see what tripped.</p>
+
+      <h2 id="prompt-cache">Prompt cache and why the Gateway owns the session boundary</h2>
+      <p>Anthropic-style prompt caching attaches <code>cache_control</code> markers to a stable prefix plus the rolling tail of the transcript (<code>agent/prompt_caching.py</code>). The default layout is <strong>system-and-3</strong>: up to four breakpoints — static system prefix, end of system prompt, and the last three cacheable non-system messages — unless a configured <code>static_system_prefix</code> splits the system block further. Details and hygiene thresholds live in <a class="inline" href="https://hermes-agent.nousresearch.com/docs/developer-guide/context-compression-and-caching">Context compression and caching</a>.</p>
+      <p>Why the Gateway must own <code>session_key</code>:</p>
+      <ul>
+        <li><strong>Agent LRU cache</strong> (<code>gateway/run_agent_cache.py</code>) maps <code>session_key → AIAgent</code>. Reusing the same instance keeps the in-memory tool registry and config signature stable; eviction commits memory but does not rotate the durable transcript id.</li>
+        <li><strong>Cache invalidation is global per agent instance</strong> — changing system prompt sections, tool schemas, or model route mid-lane forces a rebuild and cold cache writes. The gateway reloads history from the DB each turn but avoids rebuilding agents unless config drift demands it.</li>
+        <li><strong>Platform-blind agent</strong> — Telegram and Slack share one lane if they share a key (they should not); each lane gets its own cached agent and its own cache breakpoints. Multiplexed profiles namespace keys (<code>agent:work:…</code>) so parallel configs do not poison each other’s prefixes.</li>
+      </ul>
+      <p>Gateway session hygiene (rough 85% pre-turn compaction) and in-agent compression (≈50% default) are separate layers, but both assume the Gateway already decided <em>which</em> conversation file to open. Prompt caching is the economic reason the agent stays a pure “one loop per turn” object while the Gateway handles everything about <em>which</em> loop.</p>
+
+      <h2 id="takeaways">Takeaways</h2>
+      <ul>
+        <li><strong>One event contract</strong> — adapters normalize to <code>MessageEvent</code>; <code>build_session_key()</code> names the lane.</li>
+        <li><strong>Closed by default</strong> — allowlists and DM pairing; deny unless a layer explicitly allows.</li>
+        <li><strong>Busy is policy</strong> — dual-layer guard plus <code>busy_input_mode</code>; <code>/stop</code> and <code>/queue</code> are first-class.</li>
+        <li><strong>Replies survive crashes</strong> — delivery ledger redelivers finals; circuit breaker pauses sick adapters.</li>
+        <li><strong>Cache follows the session boundary</strong> — per-<code>session_key</code> agent cache and system-and-3 markers; do not fork keys by hand.</li>
+      </ul>
+      <p style="color:var(--muted);font-size:14px;">Primary references: <a class="inline" href="https://hermes-agent.nousresearch.com/docs/developer-guide/gateway-internals">Gateway internals</a>, <a class="inline" href="https://hermes-agent.nousresearch.com/docs/developer-guide/gateway-session-lifecycle">Session lifecycle</a>, <a class="inline" href="https://hermes-agent.nousresearch.com/docs/user-guide/messaging/">Messaging</a>, <a class="inline" href="https://hermes-agent.nousresearch.com/docs/developer-guide/context-compression-and-caching">Context compression and caching</a>.</p>

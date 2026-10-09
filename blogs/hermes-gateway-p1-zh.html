@@ -1,17 +1,17 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-  <link rel="icon" type="image/png" href="../assets/img/logo.png" />
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>消息网关：把平台与 Agent 彻底解耦 — Daniel Liu</title>
-  <meta content="Hermes 如何把 20+ 聊天平台归一化成一条事件流——以及为什么 Gateway 承担协议复杂度，而 Agent 只跑一次对话循环。" name="description" />
+  <meta content="Session key、鉴权、双层 busy 守卫、delivery ledger、熔断器与按会话 prompt cache——基于 Hermes 官方文档与源码的 GatewayRunner 深潜。" name="description" />
+    <link rel="icon" type="image/png" href="../assets/img/logo.png" />
+  <link href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,600,600i,700,700i|Raleway:300,300i,400,400i,500,500i,600,600i,700,700i|Poppins:300,300i,400,400i,500,500i,600,600i,700,700i" rel="stylesheet">
   <link href="../assets/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet" />
   <link href="../assets/vendor/boxicons/css/boxicons.min.css" rel="stylesheet" />
   <link href="../assets/css/style.css" rel="stylesheet" />
   <link rel="stylesheet" href="blog.css" />
   <link href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,600,600i,700,700i|Raleway:300,300i,400,400i,500,500i,600,600i,700,700i|Poppins:300,300i,400,400i,500,500i,600,600i,700,700i" rel="stylesheet">
-
   <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
   <script>document.addEventListener("DOMContentLoaded", function(){ if(window.mermaid){ mermaid.initialize({startOnLoad:true, theme:"dark", themeVariables:{fontSize:"15px"}}); } });</script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
@@ -205,6 +205,7 @@
       nav.top { flex-wrap: wrap; gap: 12px 18px; }
     }
   
+    
     .series { margin-top: 56px; padding-top: 22px; border-top: 1px solid var(--border);
       font-family: Raleway, -apple-system, system-ui, sans-serif; font-size: 14px;
       color: var(--muted); text-align: center; line-height: 2; }
@@ -236,36 +237,32 @@
     pre.src .hljs-number, pre.src .hljs-type { color: #79c0ff; }
     pre.src .hljs-attr, pre.src .hljs-params { color: #e3b341; }
 
-    .series { margin-top: 56px; padding-top: 22px; border-top: 1px solid var(--border);
-      font-family: Raleway, -apple-system, system-ui, sans-serif; font-size: 14px;
-      color: var(--muted); text-align: center; line-height: 2; }
-    .series a { color: var(--muted); text-decoration: none; }
-    .series a:hover { color: var(--accent); }
-    .series a.cur { color: var(--accent); font-weight: 600; }
-
-    .src-wrap { margin: 22px 0; }
-    .src-bar { display: flex; justify-content: space-between; align-items: center;
-      background: #161b22; border: 1px solid var(--border); border-bottom: none;
-      border-radius: 10px 10px 0 0; padding: 7px 14px; }
-    .src-lang { font-family: Raleway, -apple-system, system-ui, sans-serif;
-      font-size: 12px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
-    .src-copy { font-family: Raleway, -apple-system, system-ui, sans-serif;
-      font-size: 12px; color: var(--muted); background: transparent;
-      border: 1px solid var(--border); border-radius: 6px; padding: 3px 11px;
-      cursor: pointer; transition: color .15s, border-color .15s; }
-    .src-copy:hover { color: var(--accent); border-color: var(--accent); }
-    pre.src { background: #0e1117; border: 1px solid var(--border); border-radius: 0 0 10px 10px;
-      padding: 18px 20px; overflow-x: auto; margin: 0; }
-    pre.src code { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-      font-size: 13px; line-height: 1.7; color: #d7dde8; white-space: pre; }
-    /* highlight.js token colors tuned to the block's dark theme */
-    pre.src code.hljs { background: transparent; padding: 0; }
-    pre.src .hljs-keyword, pre.src .hljs-built_in { color: #ff7b72; }
-    pre.src .hljs-string, pre.src .hljs-comment { color: #a5d6ff; }
-    pre.src .hljs-comment { font-style: italic; opacity: .8; }
-    pre.src .hljs-title, pre.src .hljs-title.function_, pre.src .hljs-function .hljs-title { color: #d2a8ff; }
-    pre.src .hljs-number, pre.src .hljs-type { color: #79c0ff; }
-    pre.src .hljs-attr, pre.src .hljs-params { color: #e3b341; }
+    .article-toc {
+      margin: 0 0 48px; padding: 22px 24px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      font-family: Raleway, system-ui, sans-serif;
+    }
+    .article-toc-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 14px;
+      margin-bottom: 14px; flex-wrap: wrap;
+    }
+    .article-toc-title {
+      margin: 0; font-size: 13px; font-weight: 700; letter-spacing: .1em;
+      text-transform: uppercase; color: var(--muted);
+    }
+    .article-toc-lang { font-size: 13px; font-weight: 600;
+      color: var(--muted); text-decoration: none; padding: 5px 11px; border-radius: 7px;
+      border: 1px solid var(--border); transition: all .15s; white-space: nowrap; }
+    .article-toc-lang:hover { color: var(--accent); border-color: var(--accent); }
+    .article-toc-list { margin: 0; padding: 0; list-style: none; line-height: 1.5; }
+    .article-toc-list li { margin: 0 0 8px; }
+    .article-toc-list li:last-child { margin-bottom: 0; }
+    .article-toc-list a {
+      font-size: 15px; font-weight: 600; color: var(--fg); text-decoration: none;
+      border-bottom: 1px solid transparent; transition: color .15s, border-color .15s;
+    }
+    .article-toc-list a:hover { color: var(--accent); border-bottom-color: rgba(18,214,64,.4); }
+    html { scroll-behavior: smooth; }
 </style>
 </head>
 <body class="blog-shell">
@@ -286,78 +283,153 @@
       </div>
     </div>
   </header>
-
   <article class="wrap">
-<div class="eyebrow" data-od-id="headline">架构 &middot; 第 1 / 4 篇</div>
+    <div class="eyebrow" data-od-id="headline">架构 &middot; 第 1 / 4 篇</div>
     <h1 data-od-id="headline">消息网关：把平台与 Agent 彻底解耦</h1>
-    <p class="deck" data-od-id="headline">基于真实源码：每个平台适配器共享的入口契约，以及 GatewayRunner 内部把"协议复杂度"挡在 agent 核心之外的两层结构。</p>
+    <p class="deck" data-od-id="headline">从 MessageEvent 归一化、session key、鉴权、双层 busy 守卫、delivery ledger 到按会话的 prompt cache——GatewayRunner 如何把 20+ 平台接到同一条 agent 循环上。</p>
         <div class="byline">
       <div class="avatar">DL</div>
-      <span>By Daniel Liu &middot; August 23, 2026 &middot; 8 min read</span>
+      <span>By Daniel Liu &middot; October 9, 2026 &middot; 20 min read</span>
     </div>
+        <nav class="article-toc" aria-label="文章目录">
+      <div class="article-toc-head">
+        <h2 class="article-toc-title">目录</h2>
+        <a class="article-toc-lang" href="hermes-gateway-p1.html">EN</a>
+      </div>
+      <ol class="article-toc-list">
+        <li><a href="#entry-contract">入口契约</a></li>
+        <li><a href="#session-key">Session key</a></li>
+        <li><a href="#authorization">鉴权</a></li>
+        <li><a href="#pipeline">GatewayRunner 流水线</a></li>
+        <li><a href="#dual-layer-guard">双层守卫与打断/排队</a></li>
+        <li><a href="#delivery-ledger">Delivery ledger</a></li>
+        <li><a href="#circuit-breaker">熔断器</a></li>
+        <li><a href="#prompt-cache">Prompt cache</a></li>
+        <li><a href="#takeaways">小结</a></li>
+      </ol>
+    </nav>
+
         <figure class="hero-diagram">
       <pre class="mermaid">
 flowchart LR
-  U["User"] --> PA["Platform Adapters (WhatsApp, Telegram, ...)"]
-  PA --> GR["Gateway (orchestration, sessions, auth)"]
-  GR --> AG["AIAgent (one conversation loop)"]
-  AG --> GR
-  GR --> PA
-  PA --> U
+  U[用户] <-->|消息| PA[平台适配器]
+  PA <-->|事件| GW[网关]
+  GW <-->|轮次| AG[Agent]
       </pre>
-      <figcaption>核心分层：Agent 只管一次对话，所有平台复杂度都在 Gateway 与各适配器里。</figcaption>
+      <figcaption>Agent 只跑一轮对话；平台细节留在网关与适配器。</figcaption>
     </figure>
     <div data-od-id="body">
-      <h2>入口契约</h2>
-      <p>每个平台适配器——Telegram、Discord、Slack、WhatsApp、Signal 等——都继承 <code>BasePlatformAdapter.handle_message(event)</code>（<code>gateway/platforms/base.py:6045</code>）。它的唯一职责是把平台原始消息<strong>归一化</strong>成 <code>MessageEvent</code>，交给 <code>GatewayRunner._handle_message</code>（<code>gateway/run.py:16462</code>）。这条归一化就是接缝：agent 从来看不到"Telegram 更新 vs WhatsApp webhook"的区别，它只看到 <code>MessageEvent</code>。</p>
-      <p>方法（节选）<strong>立刻 return</strong>：真正的处理被 spawn 成后台任务，好让消息能一边跑 agent 一边被新消息打断，而不是排在后面（<code>gateway/platforms/base.py:6045</code>）：</p>
-      <pre class="src"><code>async def handle_message(self, event: MessageEvent) -> None:
-    """Process an incoming message. Returns quickly by spawning
-    background tasks, so new messages can be processed even while an
-    agent is running (interruption support)."""
+      <h2 id="entry-contract">入口契约</h2>
+      <p>每个平台适配器——Telegram、Discord、Slack、WhatsApp、Signal 等——都走同一条入口：<code>gateway/platforms/base.py</code> 里的 <code>BasePlatformAdapter.handle_message</code>。职责只有一个：把平台原始事件<strong>归一化</strong>成 <code>MessageEvent</code>，再交给 <code>GatewayRunner._handle_message</code>。Agent 从来看不到「Telegram 更新」和「WhatsApp webhook」的差别，只看到一条类型化的事件流。模块地图见官方 <a class="inline" href="https://hermes-agent.nousresearch.com/docs/developer-guide/gateway-internals">Gateway internals</a>；本篇按一条消息走完对运维和贡献者最关键的路径。</p>
+      <p>该方法<strong>立刻返回</strong>：真正的一轮对话在后台 task 里跑，webhook 线程不会被模型卡住，控制类命令也能在 turn 进行中插进来。</p>
+      <pre class="src"><code>async def handle_message(self, event: MessageEvent) -&gt; None:
     if not self._message_handler:
         return
     if event.allow_gateway_control:
         coerce_plaintext_gateway_command(event)
-    # Telegram topic recovery（仅 DM 会话），然后派生 key
     session_key = build_session_key(event.source, ...)
-    # ...随后 _process_message_background() 把这一轮脱离调用方 spawn 出去
-    # route into GatewayRunner._handle_message(event, session_key, ...)</code></pre>
-      <p>节选里藏着两个细节。其一，<code>build_session_key(event.source, ...)</code> 不只是对 chat id 做哈希——它还会并入 <code>group_sessions_per_user</code> 与 <code>thread_sessions_per_user</code>，于是群里可以按用户隔离会话、线程可以各自成会话。同一平台 + 同一会话 + 同一作用域永远算出同一个 key，这正是下一层"按会话路由"的依据。其二，spawn 才是"可打断"的真正来源：因为这一轮跑在后台任务里，新来的 <code>/stop</code> 或 <code>/new</code> 会绕过活跃会话锁、被内联派发，而不是漏进对话正文、也不会卡死在锁上。其三，最开头那行 <code>if not self._message_handler: return</code> 解释了为什么适配器可以先被实例化、注册，再接上正在运行的 GatewayRunner——在 handler 挂上之前，消息只是空转。</p>
+    # ... _process_message_background() -&gt; GatewayRunner._handle_message(...)</code></pre>
+      <p>有三点值得单独说清楚（不再是「两个细节……其三……」那种写法）。<strong>Handler 未挂载时直接 return</strong>，适配器可以先注册、后接线，消息在 handler 挂上之前只是空转。<strong>纯文本网关命令</strong>在 <code>allow_gateway_control</code> 为真时会被规整，没有原生斜杠的平台也能用 <code>/stop</code> 等。<strong>后台 spawn</strong> 才是双层 busy 守卫的前提：适配器可以在不死锁 webhook 的情况下排队或打断。</p>
 
-      <h2>GatewayRunner 内部的两层</h2>
-      <p>GatewayRunner 分成<strong>会话路由层</strong>——按 <code>session_key</code> 找/建会话、取活跃会话锁、跑工具审批流——和 <strong>TurnRunner</strong>（<code>gateway/run.py:4291</code>，真正跑一轮 agent 循环、流式输出、把 tool 结果喂回去）。注意坐标：<code>TurnRunner</code> <em>类</em> 在 <code>:4291</code>；<code>:5348</code> 是它的一个方法（<code>run_sync</code>）。这套切分让"平台协议复杂度"和"agent 核心逻辑"互不污染。</p>
+      <h2 id="session-key">Session key</h2>
+      <p>在鉴权和模型之前，适配器用 <code>gateway/session.py</code> 的 <code>build_session_key()</code> 派生 <code>session_key</code>——这是会话车道的<strong>唯一</strong>合法命名方式。不要手写拼接 ID；多 profile、线程、群里按人隔离，逻辑都在这个函数里。</p>
+      <p>布局（默认 profile 命名空间 <code>main</code>）：</p>
+      <pre class="src"><code>agent:{namespace}:{platform}:{chat_type}[:{scope_id}][:{chat_id}][:{thread_id}][:{participant_id}]</code></pre>
+      <p>例如 DM：<code>agent:main:telegram:dm:123456789</code>；在开启 <code>group_sessions_per_user</code> 的 Slack 群：<code>agent:main:slack:group:C012345:U987654</code>。Slack 会在 chat id 前插入 <code>scope_id</code>（工作区）；WhatsApp DM 会规范化号码；Discord 线程连续性可能把 <code>chat_type</code> 规范成 <code>thread</code>，让后续消息算出同一个 key。</p>
+      <p>两个配置项会传入每次调用：</p>
+      <ul>
+        <li><code>group_sessions_per_user</code>（默认开）——群里默认按发送者隔离，每人一条 agent 车道，除非你刻意共用一条会话。</li>
+        <li><code>thread_sessions_per_user</code>（默认关）——论坛话题、Discord 线程、Slack 线程默认<strong>多人共享</strong>一条会话，除非你显式按人拆线程车道。</li>
+      </ul>
+      <p>同一组（平台、会话、作用域）永远得到同一个 key。稳定性让 Gateway 能按车道缓存 agent、持久化会话、按车道挂 prompt cache 断点。见 <a class="inline" href="https://hermes-agent.nousresearch.com/docs/developer-guide/gateway-session-lifecycle">Gateway session lifecycle</a> 了解 <code>SessionStore</code>、<code>session_id</code> 轮换，以及<strong>不改变 key</strong> 的资源回收。</p>
 
-      <blockquote class="inline">设计直觉：Gateway 不是 agent 的"前端"，而是 agent 的"邮局"——它只负责把信（MessageEvent）正确投递、把回信（final_response）正确发出，绝不替 agent 思考。</blockquote>
+      <h2 id="authorization">鉴权</h2>
+      <p>Key 确定之后，<code>GatewayRunner</code> 判断发送者是否可以和 bot 对话。按顺序检查（先匹配到的倾向放行）；都不匹配则<strong>默认拒绝</strong>：</p>
+      <ol>
+        <li>单平台 allow-all（如 <code>TELEGRAM_ALLOW_ALL_USERS</code>）</li>
+        <li>单平台 allowlist（如 <code>TELEGRAM_ALLOWED_USERS</code>）</li>
+        <li><strong>DM pairing</strong>——已授权用户 <code>/pair</code> 拿到码，新用户发送该码；状态在 <code>gateway/pairing.py</code> 持久化，重启不丢</li>
+        <li>全局 allow-all（<code>GATEWAY_ALLOW_ALL_USERS</code> / 配置里 <code>gateway.allow_all_users</code>）</li>
+        <li>默认：拒绝，不跑 agent turn</li>
+      </ol>
+      <p>Pairing 适合没法预先铺用户 ID 的 DM 场景：bot 默认关闭，可信用户可以逐个拉人，不必改 env。生产群聊通常用 allowlist + @ 提及（平台相关），而不是 pairing。</p>
 
+      <h2 id="pipeline">GatewayRunner 流水线</h2>
+      <p><code>gateway/run.py</code> 的 <code>GatewayRunner</code> 由多个 mixin 拼成（<code>run_inbound.py</code>、<code>run_turn.py</code>、<code>run_busy.py</code>、<code>run_agent_cache.py</code> 等）。普通用户消息的路径是：</p>
       <figure class="diagram">
         <pre class="mermaid">
 flowchart TD
-  W["Webhook / inbox"] --> A["Adapter.handle_message()"]
-  A --> E["MessageEvent"]
-  E --> H["GatewayRunner._handle_message()"]
-  H --> S{"session_key resolved?"}
-  S -->|yes| L["acquire active-session lock"]
-  S -->|no| C["create session"]
-  C --> L
-  L --> T["TurnRunner (run.py:4291)"]
-  T --> AG["AIAgent loop"]
-  AG --> F["final_response"]
-  F --> H
-  H --> O["send() back to adapter"]
+  E["MessageEvent + session_key"] --> K["解析会话 / SessionStore"]
+  K --> A{"已授权?"}
+  A -->|否| X["拒绝"]
+  A -->|是| S{"斜杠命令?"}
+  S -->|是| C["命令分发表"]
+  S -->|否| B{"Agent 在跑?"}
+  B -->|是| G["Busy：interrupt / queue / steer"]
+  B -->|否| T["TurnRunner：一轮 AIAgent"]
+  T --> D["出站发送 + delivery ledger"]
         </pre>
-        <figcaption>图 1 — 一条入站消息的路径：归一化、按会话路由、跑一轮、流式回传。适配器与 Gateway 包揽了 AIAgent 方框之外的一切。</figcaption>
+        <figcaption>图 1 — GatewayRunner 决策顺序：先 key 与鉴权，再斜杠；busy 处理优先于再开一整轮 turn。</figcaption>
       </figure>
+      <p><strong>TurnRunner</strong> 管 agent 核心：按 <code>session_key</code> 拉历史、必要时跑工具审批、流式跑一轮对话循环、产出 <code>final_response</code>。适配器不 import agent 工具；runner 不解析 Telegram JSON。二十个平台不分叉 agent，靠的就是这道缝。</p>
+      <blockquote class="inline">设计直觉：Gateway 不是 agent 的「前端」，而是「邮局」——投递 <code>MessageEvent</code>、发出回信；绝不替 agent 思考。</blockquote>
 
-      <h2>为什么这个分层重要</h2>
-      <p>关键约束（来自 <code>AGENTS.md</code>）是 <strong>Per-conversation prompt caching is sacred</strong>：每轮对话复用缓存前缀，任何中途改动 system prompt 或 tool schema 都会让缓存失效、成本翻倍。因为 Gateway 管会话/作用域、agent 保持"纯一次对话循环"，同一个 agent 实例得以按会话复用而不改其上下文——缓存在 20+ 平台间都保得住。甚至还有自愈：若适配器持有一个会话的过期锁、而它的宿主任务早已退出（split-brain，issue #11016），它会清掉这把锁、落到常规派发，用户就不会卡在一把死锁后面。</p>
-
-      <h2>小结</h2>
+      <h2 id="dual-layer-guard">双层守卫、打断与排队</h2>
+      <p>当一轮 turn 已在执行时，Hermes 用<strong>两道顺序守卫</strong>（官方 <a class="inline" href="https://hermes-agent.nousresearch.com/docs/developer-guide/gateway-internals">gateway internals</a> 中的 Two-Level Message Guard）：</p>
+      <figure class="diagram">
+        <pre class="mermaid">
+flowchart TD
+  M["新入站消息"] --> L1{"L1：适配器 _active_sessions?"}
+  L1 -->|忙| P["写入 _pending_messages + interrupt 事件"]
+  L1 -->|空闲或 bypass 命令| L2["GatewayRunner._handle_message"]
+  P --> L2
+  L2 --> R{"L2：_running_agents 中有此会话?"}
+  R -->|bypass| I["内联派发：/stop /new /queue /status /approve /deny"]
+  R -->|忙 + 普通文本| INT["interrupt() 或 queue/steer"]
+        </pre>
+        <figcaption>图 2 — L1 在适配器拦截；L2 处理斜杠并按 <code>busy_input_mode</code> 处置普通消息。</figcaption>
+      </figure>
+      <p><strong>L1</strong>（<code>gateway/platforms/base.py</code>）：会话活跃时消息进 <code>_pending_messages</code>，并设置 interrupt 事件唤醒正在跑的 turn。<strong>L2</strong>（<code>gateway/run_inbound.py</code> + <code>run_busy.py</code>）：<code>_running_agents</code> 跟踪 live <code>AIAgent</code>。必须同步到达 runner 的命令用 <code>await self._message_handler(event)</code> 内联派发，避免和工具审批抢后台 task。</p>
+      <p><code>busy_input_mode</code>（网关配置）决定 busy 时<strong>非命令</strong>消息怎么办：</p>
       <ul>
-        <li><strong>一个契约，多平台：</strong><code>BasePlatformAdapter.handle_message</code> 是唯一的接缝；适配器归一化，agent 对平台无感。</li>
-        <li><strong>内部两层：</strong>会话路由（解析/加锁/审批）与 TurnRunner（跑循环）——协议复杂度永不触及 agent 核心。<code>TurnRunner</code> 在 <code>run.py:4291</code>。</li>
-        <li><strong>分层是为了缓存：</strong>"纯一次对话循环"的 agent，才让 prompt caching 在 20+ 平台间不被破坏。</li>
+        <li><code>interrupt</code>（常见默认）——对 running agent 调 <code>interrupt()</code>，新用户文本成为转向输入；网关重启时未送达的 pending 可能丢弃。</li>
+        <li><code>queue</code>——按会话 FIFO 追加（<code>/queue</code> 与 session state 里的 overflow）；在允许 drain 时重启后仍可续跑。</li>
+        <li><code>steer</code>——走 <code>running_agent.steer()</code>，必要时扇出到活跃子 agent，避免粗暴 interrupt 破坏委托中的子任务。</li>
       </ul>
+      <p>体感：长任务跑着时贴一句纠正——interrupt 会 pivot；queue 可堆消息并用 <code>/queue</code> 看深度；<code>/stop</code> 任何模式都会硬停。压缩锁或活跃子 agent 可能把 interrupt 降级为 queue，避免父会话轮换中途被撕碎。</p>
+
+      <h2 id="delivery-ledger">Delivery ledger</h2>
+      <p>生成回复 ≠ 用户收到。<code>gateway/delivery_ledger.py</code> 在每次<strong>最终出站</strong>发送前后，于 <code>state.db</code> 记一条可恢复的<strong>投递义务</strong>（见 <a class="inline" href="https://hermes-agent.nousresearch.com/docs/user-guide/messaging/">Messaging</a>）：</p>
+      <ul>
+        <li><code>record_obligation()</code> — 第一次 <code>send</code> 前，状态 <code>pending</code></li>
+        <li><code>mark_attempting()</code> — await 前立刻标记</li>
+        <li><code>mark_delivered()</code> / <code>mark_failed()</code> — 仅在明确的 <code>SendResult</code> 之后</li>
+      </ul>
+      <p>语义是<strong>至少一次</strong>。模型已写完但 WhatsApp 还没确认时网关挂了，下次启动 <code>sweep_recoverable()</code> 会认领「原进程已死」的行，重发存好的正文，而不是整轮重跑（再付推理费）。进程仍活着时的 <code>failed</code> 行由带退避（30s / 2m / 10m）的重试 sweep 处理。线结果含糊时，恢复文案可能带前缀提示「可能是重复」——宁可提醒重复，也不静默丢答案。临时斜杠回复和空正文不进 ledger；接受崩溃丢回复可设 <code>gateway.delivery_ledger: false</code>。</p>
+
+      <h2 id="circuit-breaker">熔断器</h2>
+      <p>每个平台适配器外有一层<strong>熔断器</strong>。可重试失败反复出现——断连、限流、上游 5xx——会 trip：适配器暂停、打结构化日志，并可通知 home channel。与 delivery ledger（继续重试义务）不同，熔断器<strong>不会</strong>自动恢复；上游健康后需 <code>/platform resume &lt;platform&gt;</code> 手动恢复，避免长时间故障时疯狂重连。用 <code>/platform list</code> 和日志里的 <code>circuit breaker</code>、<code>paused</code> 排查。</p>
+
+      <h2 id="prompt-cache">Prompt cache 与 Gateway 为何拥有会话边界</h2>
+      <p>Anthropic 式 prompt caching 在稳定前缀和滚动 transcript 尾部打 <code>cache_control</code> 标记（<code>agent/prompt_caching.py</code>）。默认布局是 <strong>system-and-3</strong>：最多四个断点——静态 system 前缀、system 末尾、以及最后三条可缓存的非 system 消息——若配置了 <code>static_system_prefix</code> 还会再拆 system 块。阈值与卫生层见 <a class="inline" href="https://hermes-agent.nousresearch.com/docs/developer-guide/context-compression-and-caching">Context compression and caching</a>。</p>
+      <p>Gateway 必须拥有 <code>session_key</code> 的原因：</p>
+      <ul>
+        <li><strong>Agent LRU 缓存</strong>（<code>gateway/run_agent_cache.py</code>）维护 <code>session_key → AIAgent</code>。复用实例让内存里的工具表和配置签名稳定；软淘汰会提交 memory，但不会换掉持久 transcript 的身份。</li>
+        <li><strong>缓存失效按 agent 实例全局生效</strong>——中途改 system 段、工具 schema 或模型路由会强制重建并冷写 cache。Gateway 每轮从 DB 读历史，但除非配置漂移，否则尽量不重建 agent。</li>
+        <li><strong>对平台无感的 agent</strong>——若错误共用 key，Telegram 和 Slack 会共用一条车道（不应发生）；每条车道有自己的 cached agent 和 cache 断点。多 profile 用命名空间（<code>agent:work:…</code>）避免互相污染前缀。</li>
+      </ul>
+      <p>Gateway 会话卫生（约 85% 的 turn 前粗压）与 agent 内压缩（默认约 50%）是两层，但都假设 Gateway 已经决定<strong>打开哪条</strong>对话。Prompt caching 是经济上为何 agent 保持「每 turn 一次循环」，而 Gateway 管<strong>哪一条</strong>循环。</p>
+
+      <h2 id="takeaways">小结</h2>
+      <ul>
+        <li><strong>单一事件契约</strong>——适配器归一化为 <code>MessageEvent</code>；<code>build_session_key()</code> 命名车道。</li>
+        <li><strong>默认关闭</strong>——allowlist + DM pairing；除非某层显式放行。</li>
+        <li><strong>Busy 是策略</strong>——双层守卫 + <code>busy_input_mode</code>；<code>/stop</code>、<code>/queue</code> 是一等公民。</li>
+        <li><strong>回复扛得住崩溃</strong>——delivery ledger 重发终稿；熔断器暂停病适配器。</li>
+        <li><strong>缓存跟着会话边界走</strong>——按 <code>session_key</code> 的 agent 缓存与 system-and-3；不要手写 key。</li>
+      </ul>
+      <p style="color:var(--muted);font-size:14px;">主要参考：<a class="inline" href="https://hermes-agent.nousresearch.com/docs/developer-guide/gateway-internals">Gateway internals</a>、<a class="inline" href="https://hermes-agent.nousresearch.com/docs/developer-guide/gateway-session-lifecycle">Session lifecycle</a>、<a class="inline" href="https://hermes-agent.nousresearch.com/docs/user-guide/messaging/">Messaging</a>、<a class="inline" href="https://hermes-agent.nousresearch.com/docs/developer-guide/context-compression-and-caching">Context compression and caching</a>。</p>
+
     </div>
         <div class="author">
       <div class="avatar">DL</div>
@@ -368,7 +440,7 @@ flowchart TD
     </div>
     <p class="lang-switch">Read in English? <a href="hermes-gateway-p1.html">Read this article in English &rarr;</a></p>
   </article>
-  <div class="zoom-overlay" id="zoomOverlay" aria-hidden="true"></div>
+    <div class="zoom-overlay" id="zoomOverlay" aria-hidden="true"></div>
   <script>
     (function () {
       var zoomOverlay = document.getElementById('zoomOverlay');

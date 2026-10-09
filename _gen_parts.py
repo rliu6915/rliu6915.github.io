@@ -4,6 +4,26 @@ import io, os, re
 
 from _blog_zoom import ZOOM_SNIPPET as ZOOM
 
+_ROOT = os.path.dirname(os.path.abspath(__file__))
+
+def _read_fragment(name: str) -> str:
+    path = os.path.join(_ROOT, 'fragments', name)
+    with open(path, encoding='utf-8') as f:
+        return f.read()
+
+_STYLE_PATH = '/tmp/_style.css'
+if not os.path.isfile(_STYLE_PATH):
+    _STYLE_PATH = os.path.join(_ROOT, 'blogs', 'hermes-gateway-p1.html')
+    _raw = open(_STYLE_PATH, encoding='utf-8').read()
+    _m = re.search(r'<style>(.*?)</style>', _raw, re.S)
+    _style_blob = _m.group(1) if _m else ''
+    _style_blob = re.sub(r'\.series\s*\{.*', '', _style_blob, flags=re.S)
+    open('/tmp/_style.css', 'w', encoding='utf-8').write(_style_blob)
+    _head_m = re.search(
+        r'(<script src="https://cdn.jsdelivr.net/npm/mermaid.*?</script>\s*<script>document\.addEventListener.*?</script>)',
+        _raw, re.S)
+    open('/tmp/_head_script.html', 'w', encoding='utf-8').write(_head_m.group(1) if _head_m else '')
+
 STYLE = open('/tmp/_style.css', encoding='utf-8').read()
 HEAD  = open('/tmp/_head_script.html', encoding='utf-8').read()
 
@@ -77,6 +97,81 @@ BYLINE = """    <div class="byline">
       <span>By Daniel Liu &middot; August 23, 2026 &middot; 8 min read</span>
     </div>"""
 
+GATEWAY_BYLINE = """    <div class="byline">
+      <div class="avatar">DL</div>
+      <span>By Daniel Liu &middot; October 9, 2026 &middot; 20 min read</span>
+    </div>"""
+
+ARTICLE_TOC_CSS = """
+    .article-toc {
+      margin: 0 0 48px; padding: 22px 24px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      font-family: Raleway, system-ui, sans-serif;
+    }
+    .article-toc-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 14px;
+      margin-bottom: 14px; flex-wrap: wrap;
+    }
+    .article-toc-title {
+      margin: 0; font-size: 13px; font-weight: 700; letter-spacing: .1em;
+      text-transform: uppercase; color: var(--muted);
+    }
+    .article-toc-lang { font-size: 13px; font-weight: 600;
+      color: var(--muted); text-decoration: none; padding: 5px 11px; border-radius: 7px;
+      border: 1px solid var(--border); transition: all .15s; white-space: nowrap; }
+    .article-toc-lang:hover { color: var(--accent); border-color: var(--accent); }
+    .article-toc-list { margin: 0; padding: 0; list-style: none; line-height: 1.5; }
+    .article-toc-list li { margin: 0 0 8px; }
+    .article-toc-list li:last-child { margin-bottom: 0; }
+    .article-toc-list a {
+      font-size: 15px; font-weight: 600; color: var(--fg); text-decoration: none;
+      border-bottom: 1px solid transparent; transition: color .15s, border-color .15s;
+    }
+    .article-toc-list a:hover { color: var(--accent); border-bottom-color: rgba(18,214,64,.4); }
+    html { scroll-behavior: smooth; }
+"""
+
+def gateway_article_toc(lang: str) -> str:
+    if lang == 'zh':
+        items = [
+            ('entry-contract', '入口契约'),
+            ('session-key', 'Session key'),
+            ('authorization', '鉴权'),
+            ('pipeline', 'GatewayRunner 流水线'),
+            ('dual-layer-guard', '双层守卫与打断/排队'),
+            ('delivery-ledger', 'Delivery ledger'),
+            ('circuit-breaker', '熔断器'),
+            ('prompt-cache', 'Prompt cache'),
+            ('takeaways', '小结'),
+        ]
+        title, aria, other = '目录', '文章目录', 'hermes-gateway-p1.html'
+        lang_link = 'EN'
+    else:
+        items = [
+            ('entry-contract', 'Entry contract'),
+            ('session-key', 'Session key'),
+            ('authorization', 'Authorization'),
+            ('pipeline', 'GatewayRunner pipeline'),
+            ('dual-layer-guard', 'Dual-layer guard &amp; busy modes'),
+            ('delivery-ledger', 'Delivery ledger'),
+            ('circuit-breaker', 'Circuit breaker'),
+            ('prompt-cache', 'Prompt cache'),
+            ('takeaways', 'Takeaways'),
+        ]
+        title, aria, other = 'Contents', 'Table of contents', 'hermes-gateway-p1-zh.html'
+        lang_link = '中文'
+    lis = ''.join('        <li><a href="#%s">%s</a></li>\n' % (a, b) for a, b in items)
+    return (
+        '    <nav class="article-toc" aria-label="%s">\n'
+        '      <div class="article-toc-head">\n'
+        '        <h2 class="article-toc-title">%s</h2>\n'
+        '        <a class="article-toc-lang" href="%s">%s</a>\n'
+        '      </div>\n'
+        '      <ol class="article-toc-list">\n%s'
+        '      </ol>\n'
+        '    </nav>\n' % (aria, title, other, lang_link, lis)
+    )
+
 AUTHOR_EN = """    <div class="author">
       <div class="avatar">DL</div>
       <div class="bio">
@@ -120,10 +215,10 @@ CONTENT = {
  'gateway': {
   'en': {
     'title': 'The Message Gateway: Decoupling Platforms from the Agent',
-    'desc': 'How Hermes turns 20+ chat platforms into one normalized event stream — and why the Gateway owns protocol complexity while the Agent owns a single conversation loop.',
+    'desc': 'Session keys, authorization, dual-layer busy guards, delivery ledger, circuit breaker, and per-session prompt cache — a source-grounded tour of Hermes GatewayRunner.',
     'eyebrow': 'Architecture &middot; Part 1 of 4',
     'h1': 'The Message Gateway: Decoupling Platforms from the Agent',
-    'deck': 'A source-grounded look at the entry contract every platform adapter shares, and the two layers inside GatewayRunner that keep platform protocol complexity away from the agent core.',
+    'deck': 'From MessageEvent normalization through session keys, authorization, the dual-layer busy guard, delivery ledger, and per-session prompt cache — how GatewayRunner keeps 20+ platforms on one agent loop.',
     'hero': '''    <figure class="hero-diagram">
       <pre class="mermaid">
 flowchart LR
@@ -133,58 +228,14 @@ flowchart LR
       </pre>
       <figcaption>One agent loop; platform details stay in the Gateway and adapters.</figcaption>
     </figure>''',
-    'body': '''      <h2>The entry contract</h2>
-      <p>Every platform adapter — Telegram, Discord, Slack, WhatsApp, Signal — extends <code>BasePlatformAdapter.handle_message(event)</code> (<code>gateway/platforms/base.py:6045</code>). Its only job is to <strong>normalize</strong> a platform's raw message into a <code>MessageEvent</code> and hand it to <code>GatewayRunner._handle_message</code> (<code>gateway/run.py:16462</code>). That normalization is the seam: the agent never sees "Telegram update" vs "WhatsApp webhook" — it only ever sees a <code>MessageEvent</code>.</p>
-      <p>The method (excerpt) returns <strong>immediately</strong>: the real work is spawned as a background task, so a new message can interrupt a running agent instead of queuing behind it (<code>gateway/platforms/base.py:6045</code>):</p>
-      <pre class="src"><code>async def handle_message(self, event: MessageEvent) -> None:
-    """Process an incoming message. Returns quickly by spawning
-    background tasks, so new messages can be processed even while an
-    agent is running (interruption support)."""
-    if not self._message_handler:
-        return
-    if event.allow_gateway_control:
-        coerce_plaintext_gateway_command(event)
-    # Telegram topic recovery (DM lanes only), then derive the key
-    session_key = build_session_key(event.source, ...)
-    # ...then _process_message_background() spawns the turn off the caller
-    # route into GatewayRunner._handle_message(event, session_key, ...)</code></pre>
-      <p>Two details the excerpt hides. First, <code>build_session_key(event.source, ...)</code> doesn't just hash the chat id — it folds in <code>group_sessions_per_user</code> and <code>thread_sessions_per_user</code>, so a group can scope sessions per-user and a thread can be its own session. Same platform + chat + scope always yields the same key, which is exactly what the next layer routes on. Second, the spawn is what makes interruption real: because the turn runs in a background task, an incoming <code>/stop</code> or <code>/new</code> bypasses the active-session guard and is dispatched inline, rather than leaking into the transcript or deadlocking on a lock. Third, the very first line — <code>if not self._message_handler: return</code> — is why an adapter can be instantiated and registered before it's wired to a running GatewayRunner; messages simply no-op until the handler is attached.</p>
-
-      <h2>Two layers inside GatewayRunner</h2>
-      <p>GatewayRunner splits into a <strong>session-routing layer</strong> — resolve or create a session by <code>session_key</code>, take an active-session lock, run the tool-approval flow — and the <strong>TurnRunner</strong> (<code>gateway/run.py:4291</code>), which runs one agent loop, streams output, and feeds tool results back. Note the coordinate: <code>TurnRunner</code> <em>the class</em> lives at <code>:4291</code>; <code>:5348</code> is one of its methods (<code>run_sync</code>). This split keeps "platform protocol complexity" and "agent core logic" from contaminating each other.</p>
-
-      <blockquote class="inline">Design intuition: the Gateway isn't the agent's "frontend" — it's the agent's "post office." It delivers the letter (MessageEvent) and sends the reply (final_response). It never thinks for the agent.</blockquote>
-
-      <figure class="diagram">
-        <pre class="mermaid">
-flowchart TD
-  IN[Inbound] --> AD[Adapter]
-  AD --> EV[MessageEvent]
-  EV --> RT[Gateway: session + lock]
-  RT --> TR[TurnRunner]
-  TR --> AG[Agent loop]
-  AG --> OUT[Reply]
-  OUT --> AD
-        </pre>
-        <figcaption>Figure 1 — Normalize, route by session, run one turn, send the reply.</figcaption>
-      </figure>
-
-      <h2>Why this layering matters</h2>
-      <p>The key constraint (from <code>AGENTS.md</code>) is that <strong>per-conversation prompt caching is sacred</strong>: every turn reuses a cached prefix, and any change to the system prompt or tool schema mid-conversation invalidates that cache and doubles cost. Because the Gateway owns session/scoping while the agent stays a pure "one conversation loop," the same agent instance is reused per session without ever mutating its context — caching survives across platforms. There's even a self-heal: if the adapter holds a stale lock for a session whose owner task already exited (split-brain, issue #11016), it clears the lock and falls through to normal dispatch, so the user isn't trapped behind a dead guard.</p>
-
-      <h2>Takeaways</h2>
-      <ul>
-        <li><strong>One contract, many platforms:</strong> <code>BasePlatformAdapter.handle_message</code> is the only seam; adapters normalize, the agent stays platform-blind.</li>
-        <li><strong>Two internal layers:</strong> session routing (resolve/lock/approve) vs. TurnRunner (run the loop) — protocol complexity never reaches the agent core. <code>TurnRunner</code> is at <code>run.py:4291</code>.</li>
-        <li><strong>Caching is the reason:</strong> a pure "one conversation loop" agent is what lets prompt caching stay intact across 20+ platforms.</li>
-      </ul>''',
+    'body': _read_fragment('gateway-body-en.html'),
   },
   'zh': {
     'title': '消息网关：把平台与 Agent 彻底解耦',
-    'desc': 'Hermes 如何把 20+ 聊天平台归一化成一条事件流——以及为什么 Gateway 承担协议复杂度，而 Agent 只跑一次对话循环。',
+    'desc': 'Session key、鉴权、双层 busy 守卫、delivery ledger、熔断器与按会话 prompt cache——基于 Hermes 官方文档与源码的 GatewayRunner 深潜。',
     'eyebrow': '架构 &middot; 第 1 / 4 篇',
     'h1': '消息网关：把平台与 Agent 彻底解耦',
-    'deck': '基于真实源码：每个平台适配器共享的入口契约，以及 GatewayRunner 内部把"协议复杂度"挡在 agent 核心之外的两层结构。',
+    'deck': '从 MessageEvent 归一化、session key、鉴权、双层 busy 守卫、delivery ledger 到按会话的 prompt cache——GatewayRunner 如何把 20+ 平台接到同一条 agent 循环上。',
     'hero': '''    <figure class="hero-diagram">
       <pre class="mermaid">
 flowchart LR
@@ -194,51 +245,7 @@ flowchart LR
       </pre>
       <figcaption>Agent 只跑一轮对话；平台细节留在网关与适配器。</figcaption>
     </figure>''',
-    'body': '''      <h2>入口契约</h2>
-      <p>每个平台适配器——Telegram、Discord、Slack、WhatsApp、Signal 等——都继承 <code>BasePlatformAdapter.handle_message(event)</code>（<code>gateway/platforms/base.py:6045</code>）。它的唯一职责是把平台原始消息<strong>归一化</strong>成 <code>MessageEvent</code>，交给 <code>GatewayRunner._handle_message</code>（<code>gateway/run.py:16462</code>）。这条归一化就是接缝：agent 从来看不到\"Telegram 更新 vs WhatsApp webhook\"的区别，它只看到 <code>MessageEvent</code>。</p>
-      <p>方法（节选）<strong>立刻 return</strong>：真正的处理被 spawn 成后台任务，好让消息能一边跑 agent 一边被新消息打断，而不是排在后面（<code>gateway/platforms/base.py:6045</code>）：</p>
-      <pre class="src"><code>async def handle_message(self, event: MessageEvent) -> None:
-    """Process an incoming message. Returns quickly by spawning
-    background tasks, so new messages can be processed even while an
-    agent is running (interruption support)."""
-    if not self._message_handler:
-        return
-    if event.allow_gateway_control:
-        coerce_plaintext_gateway_command(event)
-    # Telegram topic recovery（仅 DM 会话），然后派生 key
-    session_key = build_session_key(event.source, ...)
-    # ...随后 _process_message_background() 把这一轮脱离调用方 spawn 出去
-    # route into GatewayRunner._handle_message(event, session_key, ...)</code></pre>
-      <p>节选里藏着两个细节。其一，<code>build_session_key(event.source, ...)</code> 不只是对 chat id 做哈希——它还会并入 <code>group_sessions_per_user</code> 与 <code>thread_sessions_per_user</code>，于是群里可以按用户隔离会话、线程可以各自成会话。同一平台 + 同一会话 + 同一作用域永远算出同一个 key，这正是下一层"按会话路由"的依据。其二，spawn 才是"可打断"的真正来源：因为这一轮跑在后台任务里，新来的 <code>/stop</code> 或 <code>/new</code> 会绕过活跃会话锁、被内联派发，而不是漏进对话正文、也不会卡死在锁上。其三，最开头那行 <code>if not self._message_handler: return</code> 解释了为什么适配器可以先被实例化、注册，再接上正在运行的 GatewayRunner——在 handler 挂上之前，消息只是空转。</p>
-
-      <h2>GatewayRunner 内部的两层</h2>
-      <p>GatewayRunner 分成<strong>会话路由层</strong>——按 <code>session_key</code> 找/建会话、取活跃会话锁、跑工具审批流——和 <strong>TurnRunner</strong>（<code>gateway/run.py:4291</code>，真正跑一轮 agent 循环、流式输出、把 tool 结果喂回去）。注意坐标：<code>TurnRunner</code> <em>类</em> 在 <code>:4291</code>；<code>:5348</code> 是它的一个方法（<code>run_sync</code>）。这套切分让\"平台协议复杂度\"和\"agent 核心逻辑\"互不污染。</p>
-
-      <blockquote class="inline">设计直觉：Gateway 不是 agent 的\"前端\"，而是 agent 的\"邮局\"——它只负责把信（MessageEvent）正确投递、把回信（final_response）正确发出，绝不替 agent 思考。</blockquote>
-
-      <figure class="diagram">
-        <pre class="mermaid">
-flowchart TD
-  IN[入站] --> AD[适配器]
-  AD --> EV[MessageEvent]
-  EV --> RT[网关：会话与锁]
-  RT --> TR[TurnRunner]
-  TR --> AG[Agent 循环]
-  AG --> OUT[回复]
-  OUT --> AD
-        </pre>
-        <figcaption>图 1 — 归一化、按会话路由、跑一轮、回传回复。</figcaption>
-      </figure>
-
-      <h2>为什么这个分层重要</h2>
-      <p>关键约束（来自 <code>AGENTS.md</code>）是 <strong>Per-conversation prompt caching is sacred</strong>：每轮对话复用缓存前缀，任何中途改动 system prompt 或 tool schema 都会让缓存失效、成本翻倍。因为 Gateway 管会话/作用域、agent 保持\"纯一次对话循环\"，同一个 agent 实例得以按会话复用而不改其上下文——缓存在 20+ 平台间都保得住。甚至还有自愈：若适配器持有一个会话的过期锁、而它的宿主任务早已退出（split-brain，issue #11016），它会清掉这把锁、落到常规派发，用户就不会卡在一把死锁后面。</p>
-
-      <h2>小结</h2>
-      <ul>
-        <li><strong>一个契约，多平台：</strong><code>BasePlatformAdapter.handle_message</code> 是唯一的接缝；适配器归一化，agent 对平台无感。</li>
-        <li><strong>内部两层：</strong>会话路由（解析/加锁/审批）与 TurnRunner（跑循环）——协议复杂度永不触及 agent 核心。<code>TurnRunner</code> 在 <code>run.py:4291</code>。</li>
-        <li><strong>分层是为了缓存：</strong>\"纯一次对话循环\"的 agent，才让 prompt caching 在 20+ 平台间不被破坏。</li>
-      </ul>''',
+    'body': _read_fragment('gateway-body-zh.html'),
   },
  },
  'whatsapp': {
@@ -692,7 +699,12 @@ flowchart LR
 }
 
 out_dir = 'blogs'
-for slug, langs in CONTENT.items():
+
+def generate_all_parts():
+    for slug, langs in CONTENT.items():
+        _write_part(slug, langs)
+
+def _write_part(slug, langs):
     for lang in ('en', 'zh'):
         c = langs[lang]
         # strip the leading "part N of 4-part series" intro paragraph
@@ -704,6 +716,9 @@ for slug, langs in CONTENT.items():
         lang_switch = ('Prefer 中文? <a href="%s">Read this article in 中文 &rarr;</a>' % other) if lang == 'en' \
                       else ('Read in English? <a href="%s">Read this article in English &rarr;</a>' % other)
         author = AUTHOR_EN if lang == 'en' else AUTHOR_ZH
+        byline = GATEWAY_BYLINE if slug == 'gateway' else BYLINE
+        extra_css = ARTICLE_TOC_CSS if slug == 'gateway' else ''
+        article_toc = gateway_article_toc(lang) if slug == 'gateway' else ''
         langattr = 'zh-CN' if lang == 'zh' else 'en'
         html = """<!doctype html>
 <html lang="{langattr}">
@@ -712,10 +727,11 @@ for slug, langs in CONTENT.items():
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{title} — Daniel Liu</title>
   <meta content="{desc}" name="description" />
+  {blogheadassets}
   {fonts}
   {head}
   {hljscss}
-  <style>{style}{seriescss}{srccss}</style>
+  <style>{style}{seriescss}{srccss}{extracss}</style>
 </head>
 <body class="blog-shell">
 {blogheader}
@@ -724,6 +740,7 @@ for slug, langs in CONTENT.items():
     <h1 data-od-id="headline">{h1}</h1>
     <p class="deck" data-od-id="headline">{deck}</p>
     {byline}
+    {articletoc}
     {hero}
     <div data-od-id="body">
 {body}
@@ -781,9 +798,10 @@ for slug, langs in CONTENT.items():
 """
         repl = {
             '{langattr}': langattr, '{lang}': lang, '{title}': c['title'], '{desc}': c['desc'],
-            '{fonts}': FONTS, '{head}': HEAD, '{style}': STYLE, '{seriescss}': SERIES_CSS,
+            '{blogheadassets}': BLOG_HEAD_ASSETS, '{fonts}': FONTS, '{head}': HEAD, '{style}': STYLE, '{seriescss}': SERIES_CSS,
             '{srccss}': SRC_CSS, '{blogheader}': BLOG_SITE_HEADER, '{eyebrow}': c['eyebrow'], '{h1}': c['h1'],
-            '{deck}': c['deck'], '{byline}': BYLINE, '{hero}': c['hero'], '{body}': c['body'],
+            '{deck}': c['deck'], '{byline}': byline, '{extracss}': extra_css,
+            '{articletoc}': article_toc, '{hero}': c['hero'], '{body}': c['body'],
             '{author}': author, '{langswitch}': lang_switch, '{zoom}': ZOOM,
             '{hljscss}': HLJS_CSS, '{hljsjs}': HLJS_JS,
         }
@@ -795,4 +813,6 @@ for slug, langs in CONTENT.items():
         open(os.path.join(out_dir, fname), 'w', encoding='utf-8').write(html)
         print('wrote', fname, len(html), 'bytes')
 
-print('DONE')
+if __name__ == '__main__':
+    generate_all_parts()
+    print('DONE')
