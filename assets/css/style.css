@@ -319,6 +319,8 @@ svg {
 #header.header-top .container {
   display: flex;
   align-items: center;
+  padding-left: clamp(28px, 5vw, 56px);
+  padding-right: clamp(28px, 5vw, 56px);
 }
 
 #header.header-top .nav-menu {
@@ -356,7 +358,7 @@ section.section-show {
 
 section .container {
   background: rgba(0, 0, 0, 0);
-  padding: 30px;
+  padding: 30px clamp(28px, 5vw, 56px);
 }
 
 @media (max-width: 768px) {
@@ -382,7 +384,7 @@ section .container {
 
 .section-title h2::after {
   content: "";
-  width: 120px;
+  width: min(260px, 42vw);
   height: 1px;
   display: inline-block;
   background: #dee2e6;
