@@ -1,21 +1,16 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
+  <link rel="icon" type="image/png" href="../assets/img/logo.png" />
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Hermes Agent 架构深潜</title>
   <meta content="四篇合一：消息网关、WhatsApp、自我进化、长期记忆——基于真实源码的架构深潜。" name="description" />
+  <link rel="stylesheet" href="blog.css" />
   <link href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,600,600i,700,700i|Raleway:300,300i,400,400i,500,500i,600,600i,700,700i|Poppins:300,300i,400,400i,500,500i,600,600i,700,700i" rel="stylesheet">
-  
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>WhatsApp Integration: Cloud API, Webhooks, and Failure Isolation — Daniel Liu</title>
-  <meta content="Walking the Meta Cloud API path: webhook ingestion, Graph API delivery, and the three engineering details that keep a group chat from becoming a spam bot." name="description" />
-  <link href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,600,600i,700,700i|Raleway:300,300i,400,400i,500,500i,600,600i,700,700i|Poppins:300,300i,400,400i,500,500i,600,600i,700,700i" rel="stylesheet">
+
   <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
   <script>document.addEventListener("DOMContentLoaded", function(){ if(window.mermaid){ mermaid.initialize({startOnLoad:true, theme:"dark", themeVariables:{fontSize:"15px"}}); } });</script>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
-  
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
   <style>
     :root {
@@ -305,7 +300,19 @@
     }
 </style>
 </head>
-<body>
+<body class="blog-shell">
+  <header class="blog-site-header">
+    <div class="blog-site-header__inner">
+      <nav class="site-nav" aria-label="Site">
+        <a class="site-nav__wordmark" href="../index.html">Daniel Liu</a>
+        <a href="../index.html">About</a>
+        <a href="index.html">Blog</a>
+        <a href="../index.html#projects">Projects</a>
+        <a href="../index.html#toy-projects">Toy Projects</a>
+      </nav>
+    </div>
+  </header>
+
   <div class="optbar">
     <div class="optbar-inner">
       <div class="opt-left">

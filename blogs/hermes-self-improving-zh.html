@@ -1,21 +1,16 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
+  <link rel="icon" type="image/png" href="../assets/img/logo.png" />
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>自我进化：把经验固化为 Skill — Daniel Liu</title>
   <meta content="Hermes 最常被误读的部分。自我进化不是让模型改自己的代码，而是 Curator 把来之不易的经验固化成可复用的 skill。" name="description" />
+  <link rel="stylesheet" href="blog.css" />
   <link href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,600,600i,700,700i|Raleway:300,300i,400,400i,500,500i,600,600i,700,700i|Poppins:300,300i,400,400i,500,500i,600,600i,700,700i" rel="stylesheet">
-  
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>WhatsApp Integration: Cloud API, Webhooks, and Failure Isolation — Daniel Liu</title>
-  <meta content="Walking the Meta Cloud API path: webhook ingestion, Graph API delivery, and the three engineering details that keep a group chat from becoming a spam bot." name="description" />
-  <link href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,600,600i,700,700i|Raleway:300,300i,400,400i,500,500i,600,600i,700,700i|Poppins:300,300i,400,400i,500,500i,600,600i,700,700i" rel="stylesheet">
+
   <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
   <script>document.addEventListener("DOMContentLoaded", function(){ if(window.mermaid){ mermaid.initialize({startOnLoad:true, theme:"dark", themeVariables:{fontSize:"15px"}}); } });</script>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
-  
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
   <style>
     :root {
@@ -270,16 +265,21 @@
     pre.src .hljs-attr, pre.src .hljs-params { color: #e3b341; }
 </style>
 </head>
-<body>
+<body class="blog-shell">
+  <header class="blog-site-header">
+    <div class="blog-site-header__inner">
+      <nav class="site-nav" aria-label="Site">
+        <a class="site-nav__wordmark" href="../index.html">Daniel Liu</a>
+        <a href="../index.html">About</a>
+        <a href="index.html">Blog</a>
+        <a href="../index.html#projects">Projects</a>
+        <a href="../index.html#toy-projects">Toy Projects</a>
+      </nav>
+    </div>
+  </header>
+
   <article class="wrap">
-        <nav class="top">
-      <span class="wordmark">Daniel Liu</span>
-      <a href="../index.html">About</a>
-      <a href="index.html" class="active">Blog</a>
-      <a href="../index.html#projects">Projects</a>
-      <a href="../index.html#toy-projects">Toy Projects</a>
-    </nav>
-    <div class="eyebrow" data-od-id="headline">架构 &middot; 第 3 / 4 篇</div>
+<div class="eyebrow" data-od-id="headline">架构 &middot; 第 3 / 4 篇</div>
     <h1 data-od-id="headline">自我进化：把经验固化为 Skill</h1>
     <p class="deck" data-od-id="headline">基于真实源码看 Curator——一个纯函数状态机，把经验变成 skill，默认零成本、可选 LLM 合并。</p>
         <div class="byline">
