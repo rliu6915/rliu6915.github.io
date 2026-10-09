@@ -126,14 +126,11 @@ CONTENT = {
     'hero': '''    <figure class="hero-diagram">
       <pre class="mermaid">
 flowchart LR
-  U["User"] --> PA["Platform Adapters (WhatsApp, Telegram, ...)"]
-  PA --> GR["Gateway (orchestration, sessions, auth)"]
-  GR --> AG["AIAgent (one conversation loop)"]
-  AG --> GR
-  GR --> PA
-  PA --> U
+  U[User] <-->|chat| PA[Platform adapters]
+  PA <-->|events| GW[Gateway]
+  GW <-->|turn| AG[AI agent]
       </pre>
-      <figcaption>The core layering: the Agent owns only one conversation; all platform complexity lives in the Gateway and its adapters.</figcaption>
+      <figcaption>One agent loop; platform details stay in the Gateway and adapters.</figcaption>
     </figure>''',
     'body': '''      <h2>The entry contract</h2>
       <p>Every platform adapter — Telegram, Discord, Slack, WhatsApp, Signal — extends <code>BasePlatformAdapter.handle_message(event)</code> (<code>gateway/platforms/base.py:6045</code>). Its only job is to <strong>normalize</strong> a platform's raw message into a <code>MessageEvent</code> and hand it to <code>GatewayRunner._handle_message</code> (<code>gateway/run.py:16462</code>). That normalization is the seam: the agent never sees "Telegram update" vs "WhatsApp webhook" — it only ever sees a <code>MessageEvent</code>.</p>
@@ -160,20 +157,15 @@ flowchart LR
       <figure class="diagram">
         <pre class="mermaid">
 flowchart TD
-  W["Webhook / inbox"] --> A["Adapter.handle_message()"]
-  A --> E["MessageEvent"]
-  E --> H["GatewayRunner._handle_message()"]
-  H --> S{"session_key resolved?"}
-  S -->|yes| L["acquire active-session lock"]
-  S -->|no| C["create session"]
-  C --> L
-  L --> T["TurnRunner (run.py:4291)"]
-  T --> AG["AIAgent loop"]
-  AG --> F["final_response"]
-  F --> H
-  H --> O["send() back to adapter"]
+  IN[Inbound] --> AD[Adapter]
+  AD --> EV[MessageEvent]
+  EV --> RT[Gateway: session + lock]
+  RT --> TR[TurnRunner]
+  TR --> AG[Agent loop]
+  AG --> OUT[Reply]
+  OUT --> AD
         </pre>
-        <figcaption>Figure 1 — One inbound message's path: normalize, route by session, run a turn, stream the reply. The adapter and gateway own everything outside the AIAgent box.</figcaption>
+        <figcaption>Figure 1 — Normalize, route by session, run one turn, send the reply.</figcaption>
       </figure>
 
       <h2>Why this layering matters</h2>
@@ -195,14 +187,11 @@ flowchart TD
     'hero': '''    <figure class="hero-diagram">
       <pre class="mermaid">
 flowchart LR
-  U["User"] --> PA["Platform Adapters (WhatsApp, Telegram, ...)"]
-  PA --> GR["Gateway (orchestration, sessions, auth)"]
-  GR --> AG["AIAgent (one conversation loop)"]
-  AG --> GR
-  GR --> PA
-  PA --> U
+  U[用户] <-->|消息| PA[平台适配器]
+  PA <-->|事件| GW[网关]
+  GW <-->|轮次| AG[Agent]
       </pre>
-      <figcaption>核心分层：Agent 只管一次对话，所有平台复杂度都在 Gateway 与各适配器里。</figcaption>
+      <figcaption>Agent 只跑一轮对话；平台细节留在网关与适配器。</figcaption>
     </figure>''',
     'body': '''      <h2>入口契约</h2>
       <p>每个平台适配器——Telegram、Discord、Slack、WhatsApp、Signal 等——都继承 <code>BasePlatformAdapter.handle_message(event)</code>（<code>gateway/platforms/base.py:6045</code>）。它的唯一职责是把平台原始消息<strong>归一化</strong>成 <code>MessageEvent</code>，交给 <code>GatewayRunner._handle_message</code>（<code>gateway/run.py:16462</code>）。这条归一化就是接缝：agent 从来看不到\"Telegram 更新 vs WhatsApp webhook\"的区别，它只看到 <code>MessageEvent</code>。</p>
@@ -229,20 +218,15 @@ flowchart LR
       <figure class="diagram">
         <pre class="mermaid">
 flowchart TD
-  W["Webhook / inbox"] --> A["Adapter.handle_message()"]
-  A --> E["MessageEvent"]
-  E --> H["GatewayRunner._handle_message()"]
-  H --> S{"session_key resolved?"}
-  S -->|yes| L["acquire active-session lock"]
-  S -->|no| C["create session"]
-  C --> L
-  L --> T["TurnRunner (run.py:4291)"]
-  T --> AG["AIAgent loop"]
-  AG --> F["final_response"]
-  F --> H
-  H --> O["send() back to adapter"]
+  IN[入站] --> AD[适配器]
+  AD --> EV[MessageEvent]
+  EV --> RT[网关：会话与锁]
+  RT --> TR[TurnRunner]
+  TR --> AG[Agent 循环]
+  AG --> OUT[回复]
+  OUT --> AD
         </pre>
-        <figcaption>图 1 — 一条入站消息的路径：归一化、按会话路由、跑一轮、流式回传。适配器与 Gateway 包揽了 AIAgent 方框之外的一切。</figcaption>
+        <figcaption>图 1 — 归一化、按会话路由、跑一轮、回传回复。</figcaption>
       </figure>
 
       <h2>为什么这个分层重要</h2>
