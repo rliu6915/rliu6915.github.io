@@ -30,6 +30,35 @@ body.blog-shell .optbar {
   top: var(--blog-header-height);
 }
 
+/* Neutralize portfolio SPA section rules (opacity/absolute stacking) on blog pages */
+body.blog-shell section {
+  overflow: visible;
+  position: static;
+  width: auto;
+  top: auto;
+  bottom: auto;
+  opacity: 1;
+  z-index: auto;
+}
+
+body.blog-shell section.section-show {
+  top: auto;
+  bottom: auto;
+  opacity: 1;
+  padding-bottom: 0;
+}
+
+body.blog-shell section .container {
+  padding: 0;
+}
+
+@media (max-width: 768px) {
+  body.blog-shell section,
+  body.blog-shell section.section-show {
+    top: auto;
+  }
+}
+
 .blog-page {
   max-width: 740px;
   margin: 0 auto;
@@ -45,13 +74,6 @@ body.blog-shell .optbar {
   color: #fff;
 }
 
-.blog-page__lede {
-  margin: 0 0 40px;
-  font-size: 18px;
-  line-height: 1.55;
-  color: var(--muted);
-}
-
 .post-list {
   list-style: none;
   margin: 0;
@@ -63,18 +85,23 @@ body.blog-shell .optbar {
 
 .post-card {
   display: block;
-  padding: 24px 26px;
+  padding: 36px 40px;
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
+  border: none;
+  border-radius: 5px;
   text-decoration: none;
   color: inherit;
-  transition: border-color 0.2s, transform 0.2s;
+  transition: background 0.3s ease-in-out;
 }
 
 .post-card:hover {
-  border-color: rgba(18, 214, 64, 0.45);
-  transform: translateY(-1px);
+  background: #042e5f;
+}
+
+.post-card:hover .post-card__title,
+.post-card:hover .post-card__excerpt,
+.post-card:hover .post-card__cta {
+  color: #12d640;
 }
 
 .post-card__meta {
