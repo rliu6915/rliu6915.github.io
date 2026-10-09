@@ -28,10 +28,10 @@ if [[ "${1:-}" == "--publish" ]]; then
 
   card="        <div class=\"col-lg-12\" data-aos=\"fade-up\">\n          <div class=\"col-md-12 mt-4 mt-md-0 icon-box\" data-aos=\"fade-up\" data-aos-delay=\"100\">\n            <span class=\"date\">$date</span>\n            <h4><a href=\"$slug.html\">$title</a></h4>\n            <a href=\"$slug.html\">Read more →</a>\n          </div>\n        </div>\n"
 
-  for idx in "$ROOT/index.html" "$BLOGS/index.html"; do
+  for idx in "$BLOGS/index.html"; do
     [[ -f "$idx" ]] || continue
     # skip if already listed
-    grep -q "href=\"$slug.html\"\|href=\"blogs/$slug.html\"" "$idx" && { echo "already listed in $idx"; continue; }
+    grep -q "href=\"$slug.html\"" "$idx" && { echo "already listed in $idx"; continue; }
     python3 - "$idx" <<PY
 import sys
 p = sys.argv[1]
