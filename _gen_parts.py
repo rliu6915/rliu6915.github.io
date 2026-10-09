@@ -46,13 +46,30 @@ HLJS_CSS = '<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/
 HLJS_JS = """    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <script>document.addEventListener('DOMContentLoaded', function () { if (window.hljs) hljs.highlightAll(); });</script>"""
 
-NAV = """    <nav class="top">
-      <span class="wordmark">Daniel Liu</span>
-      <a href="../index.html">About</a>
-      <a href="index.html" class="active">Blog</a>
-      <a href="../index.html#projects">Projects</a>
-      <a href="../index.html#toy-projects">Toy Projects</a>
-    </nav>"""
+BLOG_HEAD_ASSETS = """  <link rel="icon" type="image/png" href="../assets/img/logo.png" />
+  <link rel="stylesheet" href="blog.css" />
+  <link href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,600,600i,700,700i|Raleway:300,300i,400,400i,500,500i,600,600i,700,700i|Poppins:300,300i,400,400i,500,500i,600,600i,700,700i" rel="stylesheet">
+  <link href="../assets/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="../assets/vendor/boxicons/css/boxicons.min.css" rel="stylesheet" />
+  <link href="../assets/css/style.css" rel="stylesheet" />"""
+
+BLOG_SITE_HEADER = """  <header id="header" class="header-top">
+    <div class="container">
+      <h1><a href="../index.html">Daniel Liu</a></h1>
+      <nav class="nav-menu d-none d-lg-block">
+        <ul>
+          <li><a href="../index.html"><span>About</span></a></li>
+          <li class="active"><a href="index.html"><span>Blog</span></a></li>
+          <li><a href="../index.html#projects"><span>Projects</span></a></li>
+          <li><a href="../index.html#toy-projects"><span>Toy Projects</span></a></li>
+        </ul>
+      </nav>
+      <div class="social-links">
+        <a href="mailto:rliu6915@163.com" target="_blank" class="google" rel="noopener"><i class="bx bxl-google"></i></a>
+        <a href="https://github.com/rliu6915" target="_blank" class="github" rel="noopener"><i class="bx bxl-github"></i></a>
+      </div>
+    </div>
+  </header>"""
 
 BYLINE = """    <div class="byline">
       <div class="avatar">DL</div>
@@ -715,9 +732,9 @@ for slug, langs in CONTENT.items():
   {hljscss}
   <style>{style}{seriescss}{srccss}</style>
 </head>
-<body>
+<body class="blog-shell">
+{blogheader}
   <article class="wrap">
-    {nav}
     <div class="eyebrow" data-od-id="headline">{eyebrow}</div>
     <h1 data-od-id="headline">{h1}</h1>
     <p class="deck" data-od-id="headline">{deck}</p>
@@ -780,7 +797,7 @@ for slug, langs in CONTENT.items():
         repl = {
             '{langattr}': langattr, '{lang}': lang, '{title}': c['title'], '{desc}': c['desc'],
             '{fonts}': FONTS, '{head}': HEAD, '{style}': STYLE, '{seriescss}': SERIES_CSS,
-            '{srccss}': SRC_CSS, '{nav}': NAV, '{eyebrow}': c['eyebrow'], '{h1}': c['h1'],
+            '{srccss}': SRC_CSS, '{blogheader}': BLOG_SITE_HEADER, '{eyebrow}': c['eyebrow'], '{h1}': c['h1'],
             '{deck}': c['deck'], '{byline}': BYLINE, '{hero}': c['hero'], '{body}': c['body'],
             '{author}': author, '{langswitch}': lang_switch, '{zoom}': ZOOM,
             '{hljscss}': HLJS_CSS, '{hljsjs}': HLJS_JS,
