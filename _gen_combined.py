@@ -7,7 +7,6 @@ import io, os, re
 # Reuse the shared pieces
 STYLE = open('/tmp/_style.css', encoding='utf-8').read()
 HEAD  = open('/tmp/_head_script.html', encoding='utf-8').read()
-ZOOM  = open('/tmp/_zoom_script.html', encoding='utf-8').read()
 
 from _gen_parts import (CONTENT, FONTS, HLJS_CSS, HLJS_JS, SERIES_CSS, SRC_CSS,
                         BYLINE, AUTHOR_EN, AUTHOR_ZH)
@@ -34,6 +33,13 @@ COMBINED_CSS = """
     .article-toc-title {
       margin: 0; font-size: 13px; font-weight: 700; letter-spacing: .1em;
       text-transform: uppercase; color: var(--muted);
+      line-height: 1.25;
+    }
+    .article-toc h2.article-toc-title { margin: 0; color: var(--muted); font-size: 13px; }
+    .article-toc ::first-letter {
+      float: none !important; font-size: inherit !important; line-height: inherit !important;
+      padding: 0 !important; font-weight: inherit !important; color: inherit !important;
+      font-family: inherit !important;
     }
     .langtoggle { font-size: 13px; font-weight: 600;
       color: var(--muted); text-decoration: none; padding: 5px 11px; border-radius: 7px;
@@ -47,7 +53,7 @@ COMBINED_CSS = """
       border-bottom: 1px solid transparent; transition: color .15s, border-color .15s;
     }
     .article-toc-list a:hover { color: var(--accent); border-bottom-color: rgba(18,214,64,.4); }
-    .article-toc-back { margin: 16px 0 0; padding-top: 14px; border-top: 1px solid var(--border); font-size: 13px; }
+    .article-toc-back { margin: 16px 0 0; padding-top: 14px; border-top: 1px solid var(--border); font-size: 13px; line-height: 1.5; }
     .article-toc-back a {
       color: var(--muted); text-decoration: none; font-weight: 600; transition: color .15s;
     }
@@ -87,7 +93,7 @@ def build(lang):
         '      <ol class="article-toc-list">\n' % (toc_aria, toc_title, other_page, lang_label) +
         toc_items +
         '      </ol>\n'
-        '      <p class="article-toc-back"><a href="%s">%s</a></p>\n'
+        '      <div class="article-toc-back"><a href="%s">%s</a></div>\n'
         '    </nav>\n' % (blog_index, back_label)
     )
 
@@ -131,7 +137,6 @@ def build(lang):
 <body>
   <article class="wrap">
 %s%s  </article>
-  %s
   %s
   <script>
     (function () {
@@ -180,7 +185,7 @@ def build(lang):
 </html>
 """ % (langattr, title, desc, FONTS, HEAD, HLJS_CSS,
        STYLE, SERIES_CSS, SRC_CSS, COMBINED_CSS,
-       toc, sections, ZOOM, HLJS_JS)
+       toc, sections, HLJS_JS)
 
     fname = 'hermes-architecture%s.html' % ('' if lang == 'en' else '-zh')
     open(os.path.join('blogs', fname), 'w', encoding='utf-8').write(html)

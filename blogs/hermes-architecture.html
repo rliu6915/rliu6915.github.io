@@ -87,7 +87,7 @@
 
     /* Body */
     p { margin: 26px 0; }
-    p:first-of-type::first-letter {
+    section.part [data-od-id="body"] > p:first-of-type::first-letter {
       float: left; font-size: 66px; line-height: .82;
       padding: 6px 12px 0 0; font-weight: 700; color: var(--accent);
       font-family: Georgia, serif;
@@ -187,19 +187,6 @@
       border-bottom: 1px solid rgba(18,214,64,.4);
     }
 
-    /* Click-to-zoom for diagrams */
-    .mermaid { cursor: zoom-in; }
-    .zoom-overlay {
-      position: fixed; inset: 0; background: rgba(0,0,0,.85);
-      display: none; align-items: center; justify-content: center;
-      z-index: 9999; padding: 40px; cursor: zoom-out;
-    }
-    .zoom-overlay.open { display: flex; }
-    .zoom-overlay svg {
-      max-width: 95vw; max-height: 90vh; width: auto; height: auto;
-      background: var(--surface); border-radius: 12px; padding: 24px;
-    }
-
     @media (max-width: 640px) {
       .related .grid { grid-template-columns: 1fr; }
       nav.top { flex-wrap: wrap; gap: 12px 18px; }
@@ -280,6 +267,13 @@
     .article-toc-title {
       margin: 0; font-size: 13px; font-weight: 700; letter-spacing: .1em;
       text-transform: uppercase; color: var(--muted);
+      line-height: 1.25;
+    }
+    .article-toc h2.article-toc-title { margin: 0; color: var(--muted); font-size: 13px; }
+    .article-toc ::first-letter {
+      float: none !important; font-size: inherit !important; line-height: inherit !important;
+      padding: 0 !important; font-weight: inherit !important; color: inherit !important;
+      font-family: inherit !important;
     }
     .langtoggle { font-size: 13px; font-weight: 600;
       color: var(--muted); text-decoration: none; padding: 5px 11px; border-radius: 7px;
@@ -293,7 +287,7 @@
       border-bottom: 1px solid transparent; transition: color .15s, border-color .15s;
     }
     .article-toc-list a:hover { color: var(--accent); border-bottom-color: rgba(18,214,64,.4); }
-    .article-toc-back { margin: 16px 0 0; padding-top: 14px; border-top: 1px solid var(--border); font-size: 13px; }
+    .article-toc-back { margin: 16px 0 0; padding-top: 14px; border-top: 1px solid var(--border); font-size: 13px; line-height: 1.5; }
     .article-toc-back a {
       color: var(--muted); text-decoration: none; font-weight: 600; transition: color .15s;
     }
@@ -340,7 +334,7 @@
         <li><a href="#self">3 · Self-Improving</a></li>
         <li><a href="#memory">4 · Memory</a></li>
       </ol>
-      <p class="article-toc-back"><a href="index.html">← Blog</a></p>
+      <div class="article-toc-back"><a href="index.html">← Blog</a></div>
     </nav>
   <section class="part" id="gateway">
     <div class="eyebrow">Architecture &middot; Part 1 of 4</div>
@@ -348,14 +342,11 @@
         <figure class="hero-diagram">
       <pre class="mermaid">
 flowchart LR
-  U["User"] --> PA["Platform Adapters (WhatsApp, Telegram, ...)"]
-  PA --> GR["Gateway (orchestration, sessions, auth)"]
-  GR --> AG["AIAgent (one conversation loop)"]
-  AG --> GR
-  GR --> PA
-  PA --> U
+  U[User] <-->|chat| PA[Platform adapters]
+  PA <-->|events| GW[Gateway]
+  GW <-->|turn| AG[AI agent]
       </pre>
-      <figcaption>The core layering: the Agent owns only one conversation; all platform complexity lives in the Gateway and its adapters.</figcaption>
+      <figcaption>One agent loop; platform details stay in the Gateway and adapters.</figcaption>
     </figure>
     <div data-od-id="body">
       <h2>The entry contract</h2>
@@ -383,20 +374,15 @@ flowchart LR
       <figure class="diagram">
         <pre class="mermaid">
 flowchart TD
-  W["Webhook / inbox"] --> A["Adapter.handle_message()"]
-  A --> E["MessageEvent"]
-  E --> H["GatewayRunner._handle_message()"]
-  H --> S{"session_key resolved?"}
-  S -->|yes| L["acquire active-session lock"]
-  S -->|no| C["create session"]
-  C --> L
-  L --> T["TurnRunner (run.py:4291)"]
-  T --> AG["AIAgent loop"]
-  AG --> F["final_response"]
-  F --> H
-  H --> O["send() back to adapter"]
+  IN[Inbound] --> AD[Adapter]
+  AD --> EV[MessageEvent]
+  EV --> RT[Gateway: session + lock]
+  RT --> TR[TurnRunner]
+  TR --> AG[Agent loop]
+  AG --> OUT[Reply]
+  OUT --> AD
         </pre>
-        <figcaption>Figure 1 — One inbound message's path: normalize, route by session, run a turn, stream the reply. The adapter and gateway own everything outside the AIAgent box.</figcaption>
+        <figcaption>Figure 1 — Normalize, route by session, run one turn, send the reply.</figcaption>
       </figure>
 
       <h2>Why this layering matters</h2>
@@ -643,19 +629,6 @@ flowchart LR
   </section>
 
   </article>
-  <script>
-    document.querySelectorAll('.mermaid').forEach(function(el){
-      el.addEventListener('click', function(){
-        var svg = el.querySelector('svg'); if(!svg) return;
-        var overlay = document.getElementById('zoomOverlay');
-        overlay.innerHTML = ''; overlay.appendChild(svg.cloneNode(true));
-        overlay.classList.add('open');
-      });
-    });
-    var zoomOverlay = document.getElementById('zoomOverlay');
-    zoomOverlay.addEventListener('click', function(){ this.classList.remove('open'); this.innerHTML=''; });
-    document.addEventListener('keydown', function(e){ if(e.key==='Escape'){ zoomOverlay.classList.remove('open'); zoomOverlay.innerHTML=''; } });
-  </script>
       <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <script>document.addEventListener('DOMContentLoaded', function () { if (window.hljs) hljs.highlightAll(); });</script>
   <script>
