@@ -47,11 +47,11 @@ HLJS_JS = """    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.j
     <script>document.addEventListener('DOMContentLoaded', function () { if (window.hljs) hljs.highlightAll(); });</script>"""
 
 BLOG_HEAD_ASSETS = """  <link rel="icon" type="image/png" href="../assets/img/logo.png" />
-  <link rel="stylesheet" href="blog.css" />
   <link href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,600,600i,700,700i|Raleway:300,300i,400,400i,500,500i,600,600i,700,700i|Poppins:300,300i,400,400i,500,500i,600,600i,700,700i" rel="stylesheet">
   <link href="../assets/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet" />
   <link href="../assets/vendor/boxicons/css/boxicons.min.css" rel="stylesheet" />
-  <link href="../assets/css/style.css" rel="stylesheet" />"""
+  <link href="../assets/css/style.css" rel="stylesheet" />
+  <link rel="stylesheet" href="blog.css" />"""
 
 BLOG_SITE_HEADER = """  <header id="header" class="header-top">
     <div class="container">
