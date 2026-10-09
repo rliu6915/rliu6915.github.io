@@ -7,6 +7,9 @@
   <title>WhatsApp 接入：Cloud API、Webhook 与失败隔离 — Daniel Liu</title>
   <meta content="走一遍 Meta Cloud API 路径：webhook 收消息、Graph API 发消息，以及让群聊不至于变成垃圾机器人的三个工程细节。" name="description" />
   <link rel="stylesheet" href="blog.css" />
+  <link href="../assets/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="../assets/vendor/boxicons/css/boxicons.min.css" rel="stylesheet" />
+  <link href="../assets/css/style.css" rel="stylesheet" />
   <link href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,600,600i,700,700i|Raleway:300,300i,400,400i,500,500i,600,600i,700,700i|Poppins:300,300i,400,400i,500,500i,600,600i,700,700i" rel="stylesheet">
 
   <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
@@ -266,15 +269,21 @@
 </style>
 </head>
 <body class="blog-shell">
-  <header class="blog-site-header">
-    <div class="blog-site-header__inner">
-      <nav class="site-nav" aria-label="Site">
-        <a class="site-nav__wordmark" href="../index.html">Daniel Liu</a>
-        <a href="../index.html">About</a>
-        <a href="index.html">Blog</a>
-        <a href="../index.html#projects">Projects</a>
-        <a href="../index.html#toy-projects">Toy Projects</a>
+  <header id="header" class="header-top">
+    <div class="container">
+      <h1><a href="../index.html">Daniel Liu</a></h1>
+      <nav class="nav-menu d-none d-lg-block">
+        <ul>
+          <li><a href="../index.html"><span>About</span></a></li>
+          <li class="active"><a href="index.html"><span>Blog</span></a></li>
+          <li><a href="../index.html#projects"><span>Projects</span></a></li>
+          <li><a href="../index.html#toy-projects"><span>Toy Projects</span></a></li>
+        </ul>
       </nav>
+      <div class="social-links">
+        <a href="mailto:rliu6915@163.com" target="_blank" class="google" rel="noopener"><i class="bx bxl-google"></i></a>
+        <a href="https://github.com/rliu6915" target="_blank" class="github" rel="noopener"><i class="bx bxl-github"></i></a>
+      </div>
     </div>
   </header>
 
