@@ -14,7 +14,7 @@
 
 body.blog-shell {
   margin: 0;
-  padding-top: calc(var(--blog-header-height) + 10px);
+  padding-top: var(--blog-header-height);
   background: linear-gradient(165deg, #010e1b 0%, #0c1a2e 50%, #061018 100%);
   background-attachment: fixed;
   color: var(--fg);
@@ -24,31 +24,15 @@ body.blog-shell {
 
 body.blog-shell #header.header-top {
   z-index: 997;
-  top: 10px;
-  left: 12px;
-  right: 12px;
-  width: auto;
-  border-radius: 8px;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.28);
-}
-
-@media (max-width: 768px) {
-  body.blog-shell #header.header-top {
-    top: 6px;
-    left: 8px;
-    right: 8px;
-    border-radius: 6px;
-  }
 }
 
 body.blog-shell .optbar {
-  top: calc(var(--blog-header-height) + 10px);
-  border-radius: 0 0 8px 8px;
-  overflow: hidden;
+  top: var(--blog-header-height);
 }
 
-/* Neutralize portfolio SPA section rules (opacity/absolute stacking) on blog pages */
-body.blog-shell section {
+/* Neutralize portfolio SPA section rules on blog article parts and the index */
+body.blog-shell section.part,
+body.blog-shell section.blog-index {
   overflow: visible;
   position: static;
   width: auto;
@@ -58,65 +42,35 @@ body.blog-shell section {
   z-index: auto;
 }
 
-body.blog-shell section.section-show {
+body.blog-shell section.part.section-show,
+body.blog-shell section.blog-index.section-show {
   top: auto;
   bottom: auto;
   opacity: 1;
   padding-bottom: 0;
 }
 
-body.blog-shell section .container {
-  padding: 0;
-}
-
 @media (max-width: 768px) {
-  body.blog-shell section,
-  body.blog-shell section.section-show {
+  body.blog-shell section.part,
+  body.blog-shell section.part.section-show,
+  body.blog-shell section.blog-index,
+  body.blog-shell section.blog-index.section-show {
     top: auto;
   }
+}
+
+.blog-index {
+  padding-bottom: 64px;
+}
+
+.blog-index__body {
+  max-width: 740px;
 }
 
 .blog-page {
   max-width: 740px;
   margin: 0 auto;
   padding: 48px 28px 96px;
-}
-
-/* Match homepage .section-title (Poppins label + ::after rule) */
-.blog-page .section-title {
-  padding-bottom: 8px;
-  margin: 0 0 36px;
-  text-align: left;
-}
-
-.blog-page .section-title h2 {
-  font-size: 14px;
-  font-weight: 500;
-  padding: 0;
-  line-height: 1px;
-  margin: 0 0 20px 0;
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  color: #dee2e6;
-  font-family: "Poppins", sans-serif;
-}
-
-.blog-page .section-title h2::after {
-  content: "";
-  width: 120px;
-  height: 1px;
-  display: inline-block;
-  background: #dee2e6;
-  margin: 4px 10px;
-}
-
-.blog-page .section-title p {
-  margin: -15px 0 15px 0;
-  font-size: 36px;
-  font-weight: 700;
-  text-transform: uppercase;
-  font-family: "Poppins", sans-serif;
-  color: #fff;
 }
 
 .post-list {
@@ -236,14 +190,6 @@ body.blog-shell section .container {
 @media (max-width: 768px) {
   :root {
     --blog-header-height: 60px;
-  }
-
-  body.blog-shell {
-    padding-top: calc(var(--blog-header-height) + 6px);
-  }
-
-  body.blog-shell .optbar {
-    top: calc(var(--blog-header-height) + 6px);
   }
 }
 

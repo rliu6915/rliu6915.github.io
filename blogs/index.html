@@ -34,25 +34,29 @@
     </div>
   </header>
 
-  <main class="blog-page">
-    <div class="section-title blog-page__section-title">
-      <h2>Blog</h2>
+  <section id="blog" class="blog-index">
+    <div class="container">
+      <div class="section-title">
+        <h2>Blog</h2>
+      </div>
+
+      <div class="blog-index__body">
+        <ul class="post-list">
+          <!-- BLOG_CARDS -->
+          <li>
+            <a class="post-card" href="hermes-architecture.html">
+              <span class="post-card__meta">August 23, 2026 · 8 min read</span>
+              <h2 class="post-card__title">Deep Dive into Hermes Agent</h2>
+              <p class="post-card__excerpt">A source-grounded deep-dive in four parts — Message Gateway, WhatsApp, Self-Improving, and Long-Term Memory — combined into one long read.</p>
+              <span class="post-card__cta">Read article →</span>
+            </a>
+          </li>
+        </ul>
+
+        <a href="../index.html" class="blog-back">← Back to About</a>
+      </div>
     </div>
-
-    <ul class="post-list">
-      <!-- BLOG_CARDS -->
-      <li>
-        <a class="post-card" href="hermes-architecture.html">
-          <span class="post-card__meta">August 23, 2026 · 8 min read</span>
-          <h2 class="post-card__title">Deep Dive into Hermes Agent</h2>
-          <p class="post-card__excerpt">A source-grounded deep-dive in four parts — Message Gateway, WhatsApp, Self-Improving, and Long-Term Memory — combined into one long read.</p>
-          <span class="post-card__cta">Read article →</span>
-        </a>
-      </li>
-    </ul>
-
-    <a href="../index.html" class="blog-back">← Back to About</a>
-  </main>
+  </section>
 
 </body>
 </html>
