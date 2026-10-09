@@ -26,10 +26,6 @@ body.blog-shell #header.header-top {
   z-index: 997;
 }
 
-body.blog-shell .optbar {
-  top: var(--blog-header-height);
-}
-
 /* Neutralize portfolio SPA section rules on blog article parts and the index */
 body.blog-shell section.part,
 body.blog-shell section.blog-index {

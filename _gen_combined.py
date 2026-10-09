@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """Build ONE combined long-form article from the 4 parts in _gen_parts.CONTENT,
-with a sticky top option bar: 4-part switcher (smooth scroll) + language toggle."""
+with an in-article table of contents (chapter anchors) + language toggle."""
 import io, os, re
 
 # Reuse the shared pieces
@@ -21,27 +21,37 @@ PARTS = [
 ]
 
 COMBINED_CSS = """
-    /* sticky option bar */
-    .optbar { position: sticky; top: 0; z-index: 50;
-      background: var(--surface); border-bottom: 1px solid var(--border);
-      box-shadow: 0 1px 0 rgba(0,0,0,.04); }
-    .optbar-inner { max-width: 740px; margin: 0 auto; padding: 10px 22px;
-      display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
-    .opt-left { display: flex; align-items: center; gap: 10px; }
-    .backlink { font-family: Raleway, system-ui, sans-serif; font-size: 13px; font-weight: 600;
-      color: var(--muted); text-decoration: none; padding: 5px 11px; border-radius: 7px;
-      border: 1px solid var(--border); transition: all .15s; white-space: nowrap; }
-    .backlink:hover { color: var(--accent); border-color: var(--accent); }
-    .parts { display: flex; gap: 4px; flex-wrap: wrap; }
-    .parts a { font-family: Raleway, system-ui, sans-serif; font-size: 13px; font-weight: 600;
-      color: var(--muted); text-decoration: none; padding: 5px 11px; border-radius: 7px;
-      border: 1px solid transparent; transition: all .15s; }
-    .parts a:hover { color: var(--accent); border-color: var(--border); }
-    .parts a.cur { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
-    .langtoggle { font-family: Raleway, system-ui, sans-serif; font-size: 13px; font-weight: 600;
+    /* in-article table of contents */
+    .article-toc {
+      margin: 0 0 48px; padding: 22px 24px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      font-family: Raleway, system-ui, sans-serif;
+    }
+    .article-toc-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 14px;
+      margin-bottom: 14px; flex-wrap: wrap;
+    }
+    .article-toc-title {
+      margin: 0; font-size: 13px; font-weight: 700; letter-spacing: .1em;
+      text-transform: uppercase; color: var(--muted);
+    }
+    .langtoggle { font-size: 13px; font-weight: 600;
       color: var(--muted); text-decoration: none; padding: 5px 11px; border-radius: 7px;
       border: 1px solid var(--border); transition: all .15s; white-space: nowrap; }
     .langtoggle:hover { color: var(--accent); border-color: var(--accent); }
+    .article-toc-list { margin: 0; padding: 0; list-style: none; line-height: 1.5; }
+    .article-toc-list li { margin: 0 0 8px; }
+    .article-toc-list li:last-child { margin-bottom: 0; }
+    .article-toc-list a {
+      font-size: 15px; font-weight: 600; color: var(--fg); text-decoration: none;
+      border-bottom: 1px solid transparent; transition: color .15s, border-color .15s;
+    }
+    .article-toc-list a:hover { color: var(--accent); border-bottom-color: rgba(18,214,64,.4); }
+    .article-toc-back { margin: 16px 0 0; padding-top: 14px; border-top: 1px solid var(--border); font-size: 13px; }
+    .article-toc-back a {
+      color: var(--muted); text-decoration: none; font-weight: 600; transition: color .15s;
+    }
+    .article-toc-back a:hover { color: var(--accent); }
     /* section separation */
     section.part { padding-top: 14px; }
     section.part + section.part { margin-top: 56px; padding-top: 40px; border-top: 1px solid var(--border); }
@@ -51,10 +61,6 @@ COMBINED_CSS = """
       border: 1px solid var(--border); transition: all .15s; }
     .footlink:hover { color: var(--accent); border-color: var(--accent); }
     html { scroll-behavior: smooth; }
-    @media (max-width: 640px) {
-      .optbar-inner { padding: 8px 14px; }
-      .parts a { padding: 4px 8px; font-size: 12px; }
-    }
 """
 
 def build(lang):
@@ -63,24 +69,26 @@ def build(lang):
     lang_label = '中文' if lang == 'en' else 'EN'
     author = AUTHOR_ZH if is_zh else AUTHOR_EN
 
-    # Option bar
-    parts_html = ''
-    for slug, secid, label in PARTS:
-        parts_html += '<a href="#%s" data-sec="%s">%s</a>\n      ' % (secid, secid, label)
-    blog_index = 'index.html' if lang == 'en' else 'index.html'
+    blog_index = 'index.html'
     back_label = '← Blog' if lang == 'en' else '← 博客'
+    toc_title = 'Contents' if lang == 'en' else '目录'
+    toc_aria = 'Table of contents' if lang == 'en' else '文章目录'
     foot_top = '↑ Back to top' if lang == 'en' else '↑ 回到顶部'
     foot_blog = '← Back to Blog' if lang == 'en' else '← 回到博客'
-    optbar = (
-        '  <div class="optbar">\n'
-        '    <div class="optbar-inner">\n'
-        '      <div class="opt-left">\n'
-        '        <a class="backlink" href="%s">%s</a>\n' % (blog_index, back_label) +
-        '        <nav class="parts">\n      ' + parts_html + '      </nav>\n'
+    toc_items = ''
+    for slug, secid, label in PARTS:
+        toc_items += '      <li><a href="#%s">%s</a></li>\n' % (secid, label)
+    toc = (
+        '    <nav class="article-toc" aria-label="%s">\n'
+        '      <div class="article-toc-head">\n'
+        '        <h2 class="article-toc-title">%s</h2>\n'
+        '        <a class="langtoggle" href="%s">%s</a>\n'
         '      </div>\n'
-        '      <a class="langtoggle" href="%s">%s</a>\n' % (other_page, lang_label) +
-        '    </div>\n'
-        '  </div>'
+        '      <ol class="article-toc-list">\n' % (toc_aria, toc_title, other_page, lang_label) +
+        toc_items +
+        '      </ol>\n'
+        '      <p class="article-toc-back"><a href="%s">%s</a></p>\n'
+        '    </nav>\n' % (blog_index, back_label)
     )
 
     # Sections
@@ -121,9 +129,8 @@ def build(lang):
   <style>%s%s%s%s</style>
 </head>
 <body>
-%s
   <article class="wrap">
-%s  </article>
+%s%s  </article>
   %s
   %s
   <script>
@@ -167,26 +174,13 @@ def build(lang):
         document.body.removeChild(ta);
         setTimeout(function () { btn.textContent = copy; }, 1500);
       }
-      // highlight the active part in the switcher as you scroll
-      var links = Array.prototype.slice.call(document.querySelectorAll('.parts a'));
-      var secs = links.map(function (a) { return document.getElementById(a.getAttribute('data-sec')); });
-      function onScroll() {
-        var pos = window.scrollY + 120;
-        var cur = secs[0];
-        secs.forEach(function (s) { if (s && s.offsetTop <= pos) cur = s; });
-        links.forEach(function (a) {
-          a.classList.toggle('cur', cur && a.getAttribute('data-sec') === cur.id);
-        });
-      }
-      window.addEventListener('scroll', onScroll, { passive: true });
-      onScroll();
     })();
   </script>
 </body>
 </html>
 """ % (langattr, title, desc, FONTS, HEAD, HLJS_CSS,
        STYLE, SERIES_CSS, SRC_CSS, COMBINED_CSS,
-       optbar, sections, ZOOM, HLJS_JS)
+       toc, sections, ZOOM, HLJS_JS)
 
     fname = 'hermes-architecture%s.html' % ('' if lang == 'en' else '-zh')
     open(os.path.join('blogs', fname), 'w', encoding='utf-8').write(html)
