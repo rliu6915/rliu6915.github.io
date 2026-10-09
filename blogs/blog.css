@@ -63,8 +63,9 @@ body.blog-shell section.blog-index.section-show {
   padding-bottom: 64px;
 }
 
-.blog-index__body {
-  max-width: 740px;
+/* Match homepage Projects: section-title margin + icon-box top margin (10px) */
+.blog-index .post-list {
+  margin-top: 10px;
 }
 
 .blog-page {
