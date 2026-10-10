@@ -135,11 +135,12 @@ def gateway_article_toc(lang: str) -> str:
     if lang == 'zh':
         items = [
             ('entry-contract', '入口契约'),
-            ('session-key', 'Session key'),
+            ('session-key', '会话：key、Store、缓存'),
             ('authorization', '鉴权'),
+            ('slash-commands', '斜杠命令'),
             ('pipeline', 'GatewayRunner 流水线'),
-            ('dual-layer-guard', '双层守卫与打断/排队'),
-            ('delivery-ledger', 'Delivery ledger'),
+            ('dual-layer-guard', '排队与 busy'),
+            ('delivery-ledger', '投递与 ledger'),
             ('circuit-breaker', '熔断器'),
             ('prompt-cache', 'Prompt cache'),
             ('takeaways', '小结'),
@@ -149,11 +150,12 @@ def gateway_article_toc(lang: str) -> str:
     else:
         items = [
             ('entry-contract', 'Entry contract'),
-            ('session-key', 'Session key'),
+            ('session-key', 'Session: key, store &amp; cache'),
             ('authorization', 'Authorization'),
+            ('slash-commands', 'Slash commands'),
             ('pipeline', 'GatewayRunner pipeline'),
-            ('dual-layer-guard', 'Dual-layer guard &amp; busy modes'),
-            ('delivery-ledger', 'Delivery ledger'),
+            ('dual-layer-guard', 'Queue &amp; busy guards'),
+            ('delivery-ledger', 'Delivery &amp; ledger'),
             ('circuit-breaker', 'Circuit breaker'),
             ('prompt-cache', 'Prompt cache'),
             ('takeaways', 'Takeaways'),
@@ -215,10 +217,10 @@ CONTENT = {
  'gateway': {
   'en': {
     'title': 'The Message Gateway: Decoupling Platforms from the Agent',
-    'desc': 'Session keys, authorization, dual-layer busy guards, delivery ledger, circuit breaker, and per-session prompt cache — a source-grounded tour of Hermes GatewayRunner.',
+    'desc': 'Session (key + SessionStore + agent LRU), auth, slash commands, queue, and delivery (delivery.py + ledger) — a source-grounded tour of Hermes GatewayRunner with links to official gateway docs.',
     'eyebrow': 'Architecture &middot; Part 1 of 4',
     'h1': 'The Message Gateway: Decoupling Platforms from the Agent',
-    'deck': 'From MessageEvent normalization through session keys, authorization, the dual-layer busy guard, delivery ledger, and per-session prompt cache — how GatewayRunner keeps 20+ platforms on one agent loop.',
+    'deck': 'From MessageEvent normalization through session key and SessionStore, ordered auth and DM pairing, slash resolve and busy_policy, dual-layer queueing with /queue FIFO, and delivery.py plus the ledger — how GatewayRunner keeps 20+ platforms on one agent loop.',
     'hero': '''    <figure class="hero-diagram">
       <pre class="mermaid">
 flowchart LR
@@ -232,10 +234,10 @@ flowchart LR
   },
   'zh': {
     'title': '消息网关：把平台与 Agent 彻底解耦',
-    'desc': 'Session key、鉴权、双层 busy 守卫、delivery ledger、熔断器与按会话 prompt cache——基于 Hermes 官方文档与源码的 GatewayRunner 深潜。',
+    'desc': '会话（key + SessionStore + agent LRU）、鉴权、斜杠命令、排队与投递（delivery.py + ledger）——链到官方 gateway 文档与源码的 GatewayRunner 深潜。',
     'eyebrow': '架构 &middot; 第 1 / 4 篇',
     'h1': '消息网关：把平台与 Agent 彻底解耦',
-    'deck': '从 MessageEvent 归一化、session key、鉴权、双层 busy 守卫、delivery ledger 到按会话的 prompt cache——GatewayRunner 如何把 20+ 平台接到同一条 agent 循环上。',
+    'deck': '从 MessageEvent 归一化、session key 与 SessionStore、有序鉴权与 DM pairing、斜杠解析与 busy_policy、双层排队与 /queue FIFO、delivery.py 与 ledger——GatewayRunner 如何把 20+ 平台接到同一条 agent 循环上。',
     'hero': '''    <figure class="hero-diagram">
       <pre class="mermaid">
 flowchart LR
