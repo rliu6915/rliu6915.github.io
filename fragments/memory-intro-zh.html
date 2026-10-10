@@ -1,0 +1,1 @@
+      <p class="chapter-intro">系列最后一篇讲持久化：Hermes 并行跑<strong>两条记忆线</strong>。事实经 <code>MemoryManager</code> 落到 <code>MEMORY.md</code> 等文件；会话历史在 <code>SessionDB</code> 里建 FTS5 全文索引（含 CJK），支撑 <code>session_search</code> 跨会话检索。下文沿这两条路径展开，并说明并发下原子写入与 drift 检测如何避免静默覆盖外部编辑。</p>

@@ -232,6 +232,12 @@
     pre.src .hljs-number, pre.src .hljs-type { color: #79c0ff; }
     pre.src .hljs-attr, pre.src .hljs-params { color: #e3b341; }
 
+    .chapter-intro::first-letter {
+      float: none !important; font-size: inherit !important; line-height: inherit !important;
+      padding: 0 !important; font-weight: inherit !important; color: inherit !important;
+      font-family: inherit !important;
+    }
+
     /* in-article table of contents */
     .article-toc {
       margin: 0 0 48px; padding: 22px 24px;
@@ -322,6 +328,7 @@ flowchart LR
       <figcaption>One agent loop; platform details stay in the Gateway and adapters.</figcaption>
     </figure>
     <div data-od-id="body">
+      <p class="chapter-intro">Chat platforms hand you webhooks and send APIs — not conversation lanes, pairing, or delivery guarantees. <strong>Platform adapters</strong> own the wire: verify callbacks, normalize platform payloads into <code>MessageEvent</code>, and send replies when the gateway asks. The <strong>gateway</strong> is the shared bot layer: <code>session_key</code> lanes, authorization, slash commands, busy queues and interrupts, and the delivery ledger that retries outbound text. The Hermes <strong>CLI</strong> bypasses the gateway but runs the same <code>AIAgent</code> turn loop; every messenger path goes through adapters plus <code>GatewayRunner</code>. Without that layer, you reimplement session routing, auth, and delivery for each platform you add.</p>
       <h2 id="entry-contract">The entry contract</h2>
       <p>Every platform adapter — Telegram, Discord, Slack, WhatsApp, Signal, and the rest — funnels through one method: <code>BasePlatformAdapter.handle_message</code> in <code>gateway/platforms/base.py</code>. Its job is to <strong>normalize</strong> whatever the platform handed you into a <code>MessageEvent</code> and forward it to <code>GatewayRunner._handle_message</code>. The agent never sees “Telegram update” versus “WhatsApp webhook”; it only sees a typed event stream. The <a class="inline" href="https://hermes-agent.nousresearch.com/docs/developer-guide/gateway-internals">Gateway internals</a> doc maps the surrounding files; this chapter walks the five mechanisms that sit between that event and a delivered reply: <strong>session</strong>, <strong>auth</strong>, <strong>commands</strong>, <strong>queue</strong>, and <strong>delivery</strong>.</p>
       <p>The handler returns <strong>immediately</strong>: adapters spawn the real turn in a background task so inbound webhooks do not block and control commands can still reach the runner while a model turn is in flight.</p>
@@ -483,6 +490,7 @@ flowchart LR
       <figcaption>The WhatsApp path: a webhook delivers inbound messages; the Graph API carries replies back out.</figcaption>
     </figure>
     <div data-od-id="body">
+      <p class="chapter-intro">This chapter goes one level deeper than the gateway abstractions: a single adapter on Meta’s <strong>WhatsApp Cloud API</strong>. You will follow <code>WhatsAppCloudAdapter</code> from webhook ingress through <code>MessageEvent</code> into <code>GatewayRunner</code>, then back out via the Graph API — and the three edge disciplines (dedup, non-throwing sends, @-mention gating) that keep a noisy group from turning the bot into a spammer.</p>
       <h2>The Cloud API shape</h2>
       <p>WhatsApp uses a webhook to <em>receive</em> messages and the Graph API to <em>send</em> them. <code>WhatsAppCloudAdapter.connect()</code> (<code>gateway/platforms/whatsapp_cloud.py:435</code>) registers the webhook verification handshake and the inbound message callback. Once verified, every user message arrives as a webhook POST, gets normalized into a <code>MessageEvent</code>, and flows into the GatewayRunner we covered in part 1. For real, the method first <strong>refuses to start</strong> if deps or config are missing, then builds the two transports — an inbound webhook server and an outbound <code>httpx</code> client:</p>
       <pre class="src"><code>async def connect(self, *, is_reconnect: bool = False) -> bool:
@@ -549,6 +557,7 @@ flowchart LR
       <figcaption>Self-improving is experience → skill → curator. The model never edits agent code.</figcaption>
     </figure>
     <div data-od-id="body">
+      <p class="chapter-intro">Hermes’s “self-improving” label is easy to misread. This chapter frames what the source actually does: the model does <strong>not</strong> edit agent code online. Experience becomes reusable <strong>skills</strong> via <code>skill_manage</code>; facts land in <code>MEMORY.md</code> / <code>USER.md</code> via the <code>memory</code> tool, with background nudges that spawn review agents — and the later <strong>Curator</strong> pass that ages and optionally merges skills on disk.</p>
       <h2>What "self-improving" actually means</h2>
       <p>Hermes's self-improvement does <strong>not</strong> let the model edit its own source online. Two things happen instead, through <strong>two independent tools</strong>:</p>
       <ul>
@@ -633,6 +642,7 @@ flowchart LR
       <figcaption>Two tracks: facts land on disk; sessions get a full-text index for cross-session retrieval.</figcaption>
     </figure>
     <div data-od-id="body">
+      <p class="chapter-intro">The series closes on persistence: Hermes runs <strong>two memory tracks</strong> in parallel. Fact memory flows through <code>MemoryManager</code> to on-disk files like <code>MEMORY.md</code>; session memory lives in <code>SessionDB</code> with an FTS5 index (including CJK) so <code>session_search</code> can recall across past conversations. The rest of the chapter walks those paths and the concurrency guards that keep atomic writes from clobbering external edits.</p>
       <h2>Fact memory</h2>
       <p>Facts flow through <code>MemoryManager → MemoryProvider</code> — a background thread, serial, de-noised. The simplest implementation, <code>MemoryStore</code> (<code>tools/memory_tool.py:159</code>), writes <code>MEMORY.md</code> straight to disk via <code>save_to_disk()</code> (<code>:387</code>). The method itself is tiny; the safety lives in <code>_write_file</code>, which uses an <strong>atomic temp-file + rename</strong> so concurrent readers never see a half-written file:</p>
       <pre class="src"><code>def save_to_disk(self, target: str):

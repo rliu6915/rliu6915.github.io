@@ -232,6 +232,12 @@
     pre.src .hljs-number, pre.src .hljs-type { color: #79c0ff; }
     pre.src .hljs-attr, pre.src .hljs-params { color: #e3b341; }
 
+    .chapter-intro::first-letter {
+      float: none !important; font-size: inherit !important; line-height: inherit !important;
+      padding: 0 !important; font-weight: inherit !important; color: inherit !important;
+      font-family: inherit !important;
+    }
+
     /* in-article table of contents */
     .article-toc {
       margin: 0 0 48px; padding: 22px 24px;
@@ -322,6 +328,7 @@ flowchart LR
       <figcaption>Agent 只跑一轮对话；平台细节留在网关与适配器。</figcaption>
     </figure>
     <div data-od-id="body">
+      <p class="chapter-intro">聊天平台只提供 webhook 和发消息 API——不会替你管会话车道、配对或投递保证。<strong>平台适配器</strong>负责「接线」：校验回调、把各平台原始事件<strong>归一化</strong>成 <code>MessageEvent</code>，并在网关要求时把回复发回去。<strong>网关</strong>才是共用的 bot 层：<code>session_key</code>、鉴权、斜杠命令、忙碌时的排队与打断，以及用 delivery ledger 重试出站正文。Hermes <strong>CLI</strong> 不走网关，但跑的是同一个 <code>AIAgent</code> 轮次循环；接 Telegram、WhatsApp 等都要经过适配器 + <code>GatewayRunner</code>。没有这一层，每接一个平台就要自己重写会话路由、鉴权和投递。</p>
       <h2 id="entry-contract">入口契约</h2>
       <p>每个平台适配器——Telegram、Discord、Slack、WhatsApp、Signal 等——都走同一条入口：<code>gateway/platforms/base.py</code> 里的 <code>BasePlatformAdapter.handle_message</code>。职责只有一个：把平台原始事件<strong>归一化</strong>成 <code>MessageEvent</code>，再交给 <code>GatewayRunner._handle_message</code>。Agent 从来看不到「Telegram 更新」和「WhatsApp webhook」的差别，只看到一条类型化的事件流。模块地图见官方 <a class="inline" href="https://hermes-agent.nousresearch.com/docs/developer-guide/gateway-internals">Gateway internals</a>；本篇沿事件到送达回信的路径，讲清五块机制：<strong>会话</strong>、<strong>鉴权</strong>、<strong>命令</strong>、<strong>排队</strong>、<strong>投递</strong>。</p>
       <p>该方法<strong>立刻返回</strong>：真正的一轮对话在后台 task 里跑，webhook 线程不会被模型卡住，控制类命令也能在 turn 进行中插进来。</p>
@@ -483,6 +490,7 @@ flowchart LR
       <figcaption>WhatsApp 路径：webhook 收消息，Graph API 把回复发回去。</figcaption>
     </figure>
     <div data-od-id="body">
+      <p class="chapter-intro">本篇从网关的抽象再下钻一层：走 Meta <strong>Cloud API</strong> 的 WhatsApp 适配器。你会跟着 <code>WhatsAppCloudAdapter</code> 从 webhook 入站、归一成 <code>MessageEvent</code>、进入 <code>GatewayRunner</code>，再经 Graph API 出站——以及三项边缘纪律（去重、发送失败不抛异常、@ 门控）如何让嘈杂群聊里的 bot 仍是帮手而不是喷子。</p>
       <h2>Cloud API 的形态</h2>
       <p>WhatsApp 用 webhook <em>收</em>消息、用 Graph API <em>发</em>消息。<code>WhatsAppCloudAdapter.connect()</code>（<code>gateway/platforms/whatsapp_cloud.py:435</code>）注册 webhook 校验握手与入站消息回调。校验通过后，每条用户消息以 webhook POST 到达，被归一化成 <code>MessageEvent</code>，流入第 1 篇讲的 GatewayRunner。真实代码里，它先<strong>拒绝启动</strong>（缺依赖或配置缺失就返回），再建两条传输——入站 webhook 服务、出站 <code>httpx</code> 客户端：</p>
       <pre class="src"><code>async def connect(self, *, is_reconnect: bool = False) -> bool:
@@ -549,6 +557,7 @@ flowchart LR
       <figcaption>自我进化是 经验 → skill → curator。模型从不去改 agent 代码。</figcaption>
     </figure>
     <div data-od-id="body">
+      <p class="chapter-intro">Hermes 的「自我进化」很容易被误读。本篇先框定源码在做什么：模型<strong>不会</strong>在线改 agent 代码。经验通过 <code>skill_manage</code> 固化为可复用的 <strong>skill</strong>；事实经 <code>memory</code> 工具写入 <code>MEMORY.md</code> / <code>USER.md</code>，并由后台 nudge 唤起 review agent——再加上后加的 <strong>Curator</strong> 轮次，在磁盘上老化、可选合并 skill。</p>
       <h2>"自我进化"到底指什么</h2>
       <p>Hermes 的自我进化<strong>不是</strong>让模型在线改自己的源码，而是经由<strong>两个相互独立的工具</strong>发生两件事：</p>
       <ul>
@@ -633,6 +642,7 @@ flowchart LR
       <figcaption>两条线：事实落盘；会话建全文索引以支持跨会话检索。</figcaption>
     </figure>
     <div data-od-id="body">
+      <p class="chapter-intro">系列最后一篇讲持久化：Hermes 并行跑<strong>两条记忆线</strong>。事实经 <code>MemoryManager</code> 落到 <code>MEMORY.md</code> 等文件；会话历史在 <code>SessionDB</code> 里建 FTS5 全文索引（含 CJK），支撑 <code>session_search</code> 跨会话检索。下文沿这两条路径展开，并说明并发下原子写入与 drift 检测如何避免静默覆盖外部编辑。</p>
       <h2>事实记忆</h2>
       <p>事实经 <code>MemoryManager → MemoryProvider</code>——后台线程、串行、去噪。最朴素的实现 <code>MemoryStore</code>（<code>tools/memory_tool.py:159</code>）通过 <code>save_to_disk()</code>（<code>:387</code>）把 <code>MEMORY.md</code> 直接落盘。方法本身很小；安全性在 <code>_write_file</code>：它用<strong>原子临时文件 + rename</strong>，并发读取者永远不会看到一个写一半的文件：</p>
       <pre class="src"><code>def save_to_disk(self, target: str):

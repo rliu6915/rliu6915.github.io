@@ -238,6 +238,12 @@
     pre.src .hljs-number, pre.src .hljs-type { color: #79c0ff; }
     pre.src .hljs-attr, pre.src .hljs-params { color: #e3b341; }
 
+    .chapter-intro::first-letter {
+      float: none !important; font-size: inherit !important; line-height: inherit !important;
+      padding: 0 !important; font-weight: inherit !important; color: inherit !important;
+      font-family: inherit !important;
+    }
+
     .article-toc {
       margin: 0 0 48px; padding: 22px 24px;
       background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
@@ -321,6 +327,7 @@ flowchart LR
       <figcaption>One agent loop; platform details stay in the Gateway and adapters.</figcaption>
     </figure>
     <div data-od-id="body">
+      <p class="chapter-intro">Chat platforms hand you webhooks and send APIs — not conversation lanes, pairing, or delivery guarantees. <strong>Platform adapters</strong> own the wire: verify callbacks, normalize platform payloads into <code>MessageEvent</code>, and send replies when the gateway asks. The <strong>gateway</strong> is the shared bot layer: <code>session_key</code> lanes, authorization, slash commands, busy queues and interrupts, and the delivery ledger that retries outbound text. The Hermes <strong>CLI</strong> bypasses the gateway but runs the same <code>AIAgent</code> turn loop; every messenger path goes through adapters plus <code>GatewayRunner</code>. Without that layer, you reimplement session routing, auth, and delivery for each platform you add.</p>
       <h2 id="entry-contract">The entry contract</h2>
       <p>Every platform adapter — Telegram, Discord, Slack, WhatsApp, Signal, and the rest — funnels through one method: <code>BasePlatformAdapter.handle_message</code> in <code>gateway/platforms/base.py</code>. Its job is to <strong>normalize</strong> whatever the platform handed you into a <code>MessageEvent</code> and forward it to <code>GatewayRunner._handle_message</code>. The agent never sees “Telegram update” versus “WhatsApp webhook”; it only sees a typed event stream. The <a class="inline" href="https://hermes-agent.nousresearch.com/docs/developer-guide/gateway-internals">Gateway internals</a> doc maps the surrounding files; this chapter walks the five mechanisms that sit between that event and a delivered reply: <strong>session</strong>, <strong>auth</strong>, <strong>commands</strong>, <strong>queue</strong>, and <strong>delivery</strong>.</p>
       <p>The handler returns <strong>immediately</strong>: adapters spawn the real turn in a background task so inbound webhooks do not block and control commands can still reach the runner while a model turn is in flight.</p>

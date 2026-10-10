@@ -10,7 +10,7 @@ HEAD  = open('/tmp/_head_script.html', encoding='utf-8').read()
 
 from _blog_zoom import ZOOM_CSS, ZOOM_SNIPPET
 from _gen_parts import (CONTENT, FONTS, HLJS_CSS, HLJS_JS, SERIES_CSS, SRC_CSS,
-                        BYLINE, AUTHOR_EN, AUTHOR_ZH)
+                        CHAPTER_INTRO_CSS, BYLINE, AUTHOR_EN, AUTHOR_ZH)
 
 # Order of the 4 parts + section ids + switcher labels
 PARTS = [
@@ -102,8 +102,6 @@ def build(lang):
     sections = ''
     for slug, secid, label in PARTS:
         c = dict(CONTENT[slug][lang])
-        # strip the leading "part N of 4-part series" intro paragraph if present
-        c['body'] = re.sub(r"^\s*<p>.*?</p>\s*\n", "", c['body'], flags=re.S)
         sections += (
             '  <section class="part" id="%s">\n' % secid +
             '    <div class="eyebrow">%s</div>\n' % c['eyebrow'] +
@@ -133,7 +131,7 @@ def build(lang):
   %s
   %s
   %s
-  <style>%s%s%s%s%s</style>
+  <style>%s%s%s%s%s%s</style>
 </head>
 <body>
   <article class="wrap">
@@ -186,7 +184,7 @@ def build(lang):
 </body>
 </html>
 """ % (langattr, title, desc, FONTS, HEAD, HLJS_CSS,
-       STYLE, SERIES_CSS, SRC_CSS, COMBINED_CSS, ZOOM_CSS,
+       STYLE, SERIES_CSS, SRC_CSS, CHAPTER_INTRO_CSS, COMBINED_CSS, ZOOM_CSS,
        toc, sections, ZOOM_SNIPPET, HLJS_JS)
 
     fname = 'hermes-architecture%s.html' % ('' if lang == 'en' else '-zh')
