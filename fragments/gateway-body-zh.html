@@ -1,5 +1,5 @@
       <h2 id="entry-contract">入口契约</h2>
-      <p>每个平台适配器——Telegram、Discord、Slack、WhatsApp、Signal 等——都走同一条入口：<code>gateway/platforms/base.py</code> 里的 <code>BasePlatformAdapter.handle_message</code>。职责只有一个：把平台原始事件<strong>归一化</strong>成 <code>MessageEvent</code>，再交给 <code>GatewayRunner._handle_message</code>。Agent 从来看不到「Telegram 更新」和「WhatsApp webhook」的差别，只看到一条类型化的事件流。模块地图见官方 <a class="inline" href="https://hermes-agent.nousresearch.com/docs/developer-guide/gateway-internals">Gateway internals</a>；本篇按一条消息走完对运维和贡献者最关键的路径。</p>
+      <p>每个平台适配器——Telegram、Discord、Slack、WhatsApp、Signal 等——都走同一条入口：<code>gateway/platforms/base.py</code> 里的 <code>BasePlatformAdapter.handle_message</code>。职责只有一个：把平台原始事件<strong>归一化</strong>成 <code>MessageEvent</code>，再交给 <code>GatewayRunner._handle_message</code>。Agent 从来看不到「Telegram 更新」和「WhatsApp webhook」的差别，只看到一条类型化的事件流。模块地图见官方 <a class="inline" href="https://hermes-agent.nousresearch.com/docs/developer-guide/gateway-internals">Gateway internals</a>；本篇沿事件到送达回信的路径，讲清五块机制：<strong>会话</strong>、<strong>鉴权</strong>、<strong>命令</strong>、<strong>排队</strong>、<strong>投递</strong>。</p>
       <p>该方法<strong>立刻返回</strong>：真正的一轮对话在后台 task 里跑，webhook 线程不会被模型卡住，控制类命令也能在 turn 进行中插进来。</p>
       <pre class="src"><code>async def handle_message(self, event: MessageEvent) -&gt; None:
     if not self._message_handler:
@@ -8,103 +8,130 @@
         coerce_plaintext_gateway_command(event)
     session_key = build_session_key(event.source, ...)
     # ... _process_message_background() -&gt; GatewayRunner._handle_message(...)</code></pre>
-      <p>有三点值得单独说清楚（不再是「两个细节……其三……」那种写法）。<strong>Handler 未挂载时直接 return</strong>，适配器可以先注册、后接线，消息在 handler 挂上之前只是空转。<strong>纯文本网关命令</strong>在 <code>allow_gateway_control</code> 为真时会被规整，没有原生斜杠的平台也能用 <code>/stop</code> 等。<strong>后台 spawn</strong> 才是双层 busy 守卫的前提：适配器可以在不死锁 webhook 的情况下排队或打断。</p>
+      <p>有三点值得单独说清楚。<strong>Handler 未挂载时直接 return</strong>，适配器可以先注册、后接线，消息在 handler 挂上之前只是空转。<strong>纯文本网关命令</strong>在 <code>allow_gateway_control</code> 为真时会被规整，没有原生斜杠的平台也能用 <code>/stop</code> 等。<strong>后台 spawn</strong> 才是双层 busy 守卫的前提：适配器可以在不死锁 webhook 的情况下排队或打断。</p>
 
-      <h2 id="session-key">Session key</h2>
-      <p>在鉴权和模型之前，适配器用 <code>gateway/session.py</code> 的 <code>build_session_key()</code> 派生 <code>session_key</code>——这是会话车道的<strong>唯一</strong>合法命名方式。不要手写拼接 ID；多 profile、线程、群里按人隔离，逻辑都在这个函数里。</p>
+      <h2 id="session-key">会话：key、SessionStore 与 agent 缓存</h2>
+      <p>在鉴权和模型之前，适配器用 <code>gateway/session.py</code> 的 <code>build_session_key()</code> 派生 <code>session_key</code>——这是会话车道的<strong>唯一</strong>合法命名方式（runner 内通过 <code>_session_key_for_source()</code> 调用）。不要手写拼接 ID；多 profile、线程、群里按人隔离，逻辑都在这个函数里。完整 key 规则见 <a class="inline" href="https://hermes-agent.nousresearch.com/docs/developer-guide/gateway-session-lifecycle">Gateway session lifecycle</a>。</p>
       <p>布局（默认 profile 命名空间 <code>main</code>）：</p>
       <pre class="src"><code>agent:{namespace}:{platform}:{chat_type}[:{scope_id}][:{chat_id}][:{thread_id}][:{participant_id}]</code></pre>
-      <p>例如 DM：<code>agent:main:telegram:dm:123456789</code>；在开启 <code>group_sessions_per_user</code> 的 Slack 群：<code>agent:main:slack:group:C012345:U987654</code>。Slack 会在 chat id 前插入 <code>scope_id</code>（工作区）；WhatsApp DM 会规范化号码；Discord 线程连续性可能把 <code>chat_type</code> 规范成 <code>thread</code>，让后续消息算出同一个 key。</p>
-      <p>两个配置项会传入每次调用：</p>
+      <p>例如 DM：<code>agent:main:telegram:dm:123456789</code>；在开启 <code>group_sessions_per_user</code> 的 Slack 群：<code>agent:main:slack:group:C012345:U987654</code>。同一组（平台、会话、作用域）永远得到同一个 key，Gateway 才能按车道缓存 agent、持久化会话、按车道挂 prompt cache 断点。</p>
+      <p><strong>SessionStore</strong>（<code>gateway/session.py</code>）把稳定的 <code>session_key</code> 映射到可轮换的 <code>session_id</code>（<code>YYYYMMDD_HHMMSS_&lt;8hex&gt;</code>）。元数据在 <code>sessions.json</code>；transcript 与持久化会话行在 SQLite 的 <code>SessionDB</code> 里。每条入站消息会走 <code>get_or_create_session()</code>：</p>
+      <ul>
+        <li><code>suspended=True</code>（<code>/stop</code> 或 stuck-loop 升级）→ 硬擦除：下次访问换新 <code>session_id</code>。</li>
+        <li><code>resume_pending=True</code>（崩溃恢复、drain 超时）→ <strong>保留</strong>原 <code>session_id</code> 与 transcript；下一轮成功 turn 后清除标记。</li>
+        <li>否则 → 更新 <code>updated_at</code>，继续同一 incarnation，直到 <code>/new</code>、<code>/reset</code> 或显式策略要求重置。</li>
+      </ul>
+      <p>资源回收（TTL、LRU 路由项修剪、内存压力 sweep）只释放<strong>缓存</strong>，不改变 key、也不结束持久 transcript——仅靠空闲时间不会轮换对话。</p>
+      <p><strong>Agent LRU 缓存</strong>（<code>gateway/run_agent_cache.py</code>）是第二条索引：<code>session_key → AIAgent</code>。命中则复用同一内存实例（工具表、配置签名、prompt cache 热度）；未命中则新建，并可能按 LRU 淘汰（默认上限 128）。淘汰走 <code>_commit_then_release_soft</code>：memory provider 刷盘、客户端释放，但 SQLite transcript 与 <code>session_id</code> 不变，下轮可继续。正在 turn 的 agent、受保护的近期车道、以及 transcript 尚未落盘对齐的会话不会被 shed。因此会话边界必须由 Gateway 持有，而不是 agent 自己拼 key。</p>
+      <p>两个配置项会传入每次 <code>build_session_key()</code>：</p>
       <ul>
         <li><code>group_sessions_per_user</code>（默认开）——群里默认按发送者隔离，每人一条 agent 车道，除非你刻意共用一条会话。</li>
         <li><code>thread_sessions_per_user</code>（默认关）——论坛话题、Discord 线程、Slack 线程默认<strong>多人共享</strong>一条会话，除非你显式按人拆线程车道。</li>
       </ul>
-      <p>同一组（平台、会话、作用域）永远得到同一个 key。稳定性让 Gateway 能按车道缓存 agent、持久化会话、按车道挂 prompt cache 断点。见 <a class="inline" href="https://hermes-agent.nousresearch.com/docs/developer-guide/gateway-session-lifecycle">Gateway session lifecycle</a> 了解 <code>SessionStore</code>、<code>session_id</code> 轮换，以及<strong>不改变 key</strong> 的资源回收。</p>
 
       <h2 id="authorization">鉴权</h2>
-      <p>Key 确定之后，<code>GatewayRunner</code> 判断发送者是否可以和 bot 对话。按顺序检查（先匹配到的倾向放行）；都不匹配则<strong>默认拒绝</strong>：</p>
+      <p>Key 确定之后，<code>GatewayRunner</code> 判断发送者是否可以和 bot 对话。按顺序检查（先匹配到的倾向放行）；都不匹配则<strong>默认拒绝</strong>——不跑 agent turn：</p>
       <ol>
         <li>单平台 allow-all（如 <code>TELEGRAM_ALLOW_ALL_USERS</code>）</li>
         <li>单平台 allowlist（如 <code>TELEGRAM_ALLOWED_USERS</code>）</li>
-        <li><strong>DM pairing</strong>——已授权用户 <code>/pair</code> 拿到码，新用户发送该码；状态在 <code>gateway/pairing.py</code> 持久化，重启不丢</li>
-        <li>全局 allow-all（<code>GATEWAY_ALLOW_ALL_USERS</code> / 配置里 <code>gateway.allow_all_users</code>）</li>
-        <li>默认：拒绝，不跑 agent turn</li>
+        <li><strong>DM pairing</strong>——状态在 <code>gateway/pairing.py</code> 持久化，重启不丢</li>
+        <li>全局 allow-all（<code>GATEWAY_ALLOW_ALL_USERS</code> / 配置里 <code>gateway.allow_all_users</code>，由 <code>gateway/config_loader.py</code> 桥接）</li>
+        <li>默认：拒绝</li>
       </ol>
-      <p>Pairing 适合没法预先铺用户 ID 的 DM 场景：bot 默认关闭，可信用户可以逐个拉人，不必改 env。生产群聊通常用 allowlist + @ 提及（平台相关），而不是 pairing。</p>
+      <p><strong>DM pairing 流程</strong>（见 <a class="inline" href="https://hermes-agent.nousresearch.com/docs/developer-guide/gateway-internals">Gateway internals</a>）：已授权用户执行 <code>/pair</code> 获得短码；新用户把该码作为普通消息发送；匹配后其平台用户 id 写入 pairing 存储，之后视同 allowlist 用户。适合无法预先铺员工 ID 的 DM：默认关闭，逐个拉人，不必改 env。生产群聊通常用 allowlist + @ 提及，而不是 pairing。</p>
+
+      <h2 id="slash-commands">斜杠命令：解析与 busy 策略</h2>
+      <p>网关斜杠命令共用一条流水线（<a class="inline" href="https://hermes-agent.nousresearch.com/docs/developer-guide/gateway-internals">Gateway internals</a> 中 Slash Command Dispatch）：</p>
+      <ol>
+        <li><code>hermes_cli/commands.py</code> 的 <code>resolve_command()</code> 把用户输入映射为规范命令名（别名、前缀匹配）。</li>
+        <li>规范名须出现在 <code>GATEWAY_KNOWN_COMMANDS</code> 中。</li>
+        <li><code>gateway/run_inbound.py</code> 的 <code>_handle_message()</code> 通过 <code>gateway/slash_commands_*.py</code> mixin 上的 <code>_handle_&lt;name&gt;_command</code> 查找处理器，表由 <code>gateway/run_busy.py</code> 的 <code>_IDLE_COMMANDS</code> / <code>_PLAIN_COMMANDS</code> 构建为 <code>_command_handler_table</code>——不是一长串 <code>if canonical == ...</code>。</li>
+        <li><code>CommandDef</code> 上的可选 <code>gateway_config_gate</code> 在功能关闭时跳过处理器。</li>
+      </ol>
+      <p>当 <code>session_key</code> 已在 <code>_running_agents</code> 中时，<code>_dispatch_busy_slash_command()</code> 按各命令的 <code>CommandDef.busy_policy</code> 与可选 <code>busy_handler</code>（<code>_busy_&lt;name&gt;_command</code>）路由：执行 mid-turn 变体、在 policy 允许时执行普通处理器，或回复拒绝（「Agent 正在运行——…不能 mid-turn 执行」）。</p>
+      <p><strong>Bypass 命令</strong>——<code>/stop</code>、<code>/new</code>、<code>/approve</code>、<code>/deny</code>、<code>/queue</code>、<code>/status</code>——有 mid-run 处理器，必须同步到达 runner。适配器 L1 与 runner L2 用 <code>await self._message_handler(event)</code> 内联派发，而不是再开后台 task，避免与工具审批抢 race、也避免「一直 busy」死锁。</p>
 
       <h2 id="pipeline">GatewayRunner 流水线</h2>
       <p><code>gateway/run.py</code> 的 <code>GatewayRunner</code> 由多个 mixin 拼成（<code>run_inbound.py</code>、<code>run_turn.py</code>、<code>run_busy.py</code>、<code>run_agent_cache.py</code> 等）。普通用户消息的路径是：</p>
       <figure class="diagram">
         <pre class="mermaid">
 flowchart TD
-  E["MessageEvent + session_key"] --> K["解析会话 / SessionStore"]
+  E["MessageEvent + session_key"] --> K["SessionStore.get_or_create_session"]
   K --> A{"已授权?"}
   A -->|否| X["拒绝"]
   A -->|是| S{"斜杠命令?"}
-  S -->|是| C["命令分发表"]
+  S -->|是| C["resolve_command → 命令表"]
   S -->|否| B{"Agent 在跑?"}
-  B -->|是| G["Busy：interrupt / queue / steer"]
+  B -->|是| G["Busy 守卫 + 排队策略"]
   B -->|否| T["TurnRunner：一轮 AIAgent"]
-  T --> D["出站发送 + delivery ledger"]
+  T --> D["delivery.py → adapter.send + ledger"]
         </pre>
-        <figcaption>图 1 — GatewayRunner 决策顺序：先 key 与鉴权，再斜杠；busy 处理优先于再开一整轮 turn。</figcaption>
+        <figcaption>图 1 — GatewayRunner 决策顺序：先会话与鉴权，再斜杠；busy 处理优先于再开一整轮 turn。</figcaption>
       </figure>
       <p><strong>TurnRunner</strong> 管 agent 核心：按 <code>session_key</code> 拉历史、必要时跑工具审批、流式跑一轮对话循环、产出 <code>final_response</code>。适配器不 import agent 工具；runner 不解析 Telegram JSON。二十个平台不分叉 agent，靠的就是这道缝。</p>
       <blockquote class="inline">设计直觉：Gateway 不是 agent 的「前端」，而是「邮局」——投递 <code>MessageEvent</code>、发出回信；绝不替 agent 思考。</blockquote>
 
-      <h2 id="dual-layer-guard">双层守卫、打断与排队</h2>
-      <p>当一轮 turn 已在执行时，Hermes 用<strong>两道顺序守卫</strong>（官方 <a class="inline" href="https://hermes-agent.nousresearch.com/docs/developer-guide/gateway-internals">gateway internals</a> 中的 Two-Level Message Guard）：</p>
+      <h2 id="dual-layer-guard">排队：双层 pending 与 <code>/queue</code> FIFO</h2>
+      <p>当一轮 turn 已在执行时，Hermes 用<strong>两道顺序守卫</strong>，以及两种不同的排队语义（见 <a class="inline" href="https://hermes-agent.nousresearch.com/docs/developer-guide/gateway-internals">gateway internals</a> 与 <a class="inline" href="https://hermes-agent.nousresearch.com/docs/developer-guide/gateway-session-lifecycle">session lifecycle</a> 中的 Two-Level Message Guard、Message Queuing Flow）：</p>
       <figure class="diagram">
         <pre class="mermaid">
 flowchart TD
   M["新入站消息"] --> L1{"L1：适配器 _active_sessions?"}
-  L1 -->|忙| P["写入 _pending_messages + interrupt 事件"]
+  L1 -->|忙| P["单槽 _pending_messages + interrupt 事件"]
   L1 -->|空闲或 bypass 命令| L2["GatewayRunner._handle_message"]
   P --> L2
   L2 --> R{"L2：_running_agents 中有此会话?"}
-  R -->|bypass| I["内联派发：/stop /new /queue /status /approve /deny"]
-  R -->|忙 + 普通文本| INT["interrupt() 或 queue/steer"]
+  R -->|bypass 斜杠| I["内联：/stop /new /queue /status /approve /deny"]
+  R -->|忙 + 普通文本| INT["按 busy_input_mode：interrupt / queue / steer"]
         </pre>
         <figcaption>图 2 — L1 在适配器拦截；L2 处理斜杠并按 <code>busy_input_mode</code> 处置普通消息。</figcaption>
       </figure>
-      <p><strong>L1</strong>（<code>gateway/platforms/base.py</code>）：会话活跃时消息进 <code>_pending_messages</code>，并设置 interrupt 事件唤醒正在跑的 turn。<strong>L2</strong>（<code>gateway/run_inbound.py</code> + <code>run_busy.py</code>）：<code>_running_agents</code> 跟踪 live <code>AIAgent</code>。必须同步到达 runner 的命令用 <code>await self._message_handler(event)</code> 内联派发，避免和工具审批抢后台 task。</p>
+      <p><strong>L1</strong>（<code>gateway/platforms/base.py</code>）：会话活跃时，消息进入每会话<strong>单槽</strong> <code>_pending_messages</code>（突发合并——第二条会覆盖槽位），并设置 interrupt 事件唤醒正在跑的 turn。<strong>L2</strong>（<code>gateway/run_inbound.py</code> + <code>run_busy.py</code>）：<code>_running_agents</code> 跟踪 live <code>AIAgent</code>，对非命令文本应用 <code>busy_input_mode</code>。</p>
+      <p><strong>FIFO <code>/queue</code></strong> 与 interrupt 跟进不同。每次 <code>/queue</code> 必须各自产生一整轮 agent turn，按序、不合并。<code>run_busy.py</code> 的 <code>_enqueue_fifo()</code> 在槽位空闲时放入事件；槽位占用时追加到 <code>_queued_events[session_key]</code>。每次 drain 后 <code>_promote_queued_event()</code> 把溢出队列头推进槽位。<code>_queue_depth()</code> 返回 <code>len(overflow) + (槽位是否占用 ? 1 : 0)</code>——即 <code>/queue</code> 向运维展示的深度。<code>/new</code>、<code>/reset</code> 会清掉排队的人类跟进；为 async delegation 固定的内部 wake 事件按设计可能保留。</p>
       <p><code>busy_input_mode</code>（网关配置）决定 busy 时<strong>非命令</strong>消息怎么办：</p>
       <ul>
-        <li><code>interrupt</code>（常见默认）——对 running agent 调 <code>interrupt()</code>，新用户文本成为转向输入；网关重启时未送达的 pending 可能丢弃。</li>
-        <li><code>queue</code>——按会话 FIFO 追加（<code>/queue</code> 与 session state 里的 overflow）；在允许 drain 时重启后仍可续跑。</li>
+        <li><code>interrupt</code>（常见默认）——对 running agent 调 <code>interrupt()</code>，新用户文本成为转向输入；槽位 pending 可能在网关重启时丢失。</li>
+        <li><code>queue</code>——在配置允许时接近显式 <code>/queue</code> 语义；启用 drain-on-shutdown 时重启后可续跑。</li>
         <li><code>steer</code>——走 <code>running_agent.steer()</code>，必要时扇出到活跃子 agent，避免粗暴 interrupt 破坏委托中的子任务。</li>
       </ul>
-      <p>体感：长任务跑着时贴一句纠正——interrupt 会 pivot；queue 可堆消息并用 <code>/queue</code> 看深度；<code>/stop</code> 任何模式都会硬停。压缩锁或活跃子 agent 可能把 interrupt 降级为 queue，避免父会话轮换中途被撕碎。</p>
+      <p>压缩锁或活跃子 agent 可能把 interrupt 降级为 queue，避免父会话轮换中途被撕碎。体感：长任务跑着时贴纠正——interrupt 会 pivot；queue 模式可堆任务；<code>/stop</code> 任何模式都会硬停。</p>
 
-      <h2 id="delivery-ledger">Delivery ledger</h2>
-      <p>生成回复 ≠ 用户收到。<code>gateway/delivery_ledger.py</code> 在每次<strong>最终出站</strong>发送前后，于 <code>state.db</code> 记一条可恢复的<strong>投递义务</strong>（见 <a class="inline" href="https://hermes-agent.nousresearch.com/docs/user-guide/messaging/">Messaging</a>）：</p>
+      <h2 id="delivery-ledger">投递：<code>delivery.py</code> 与 ledger</h2>
+      <p>生成回复 ≠ 用户收到。<code>gateway/delivery.py</code> 负责出站路由（<a class="inline" href="https://hermes-agent.nousresearch.com/docs/developer-guide/gateway-internals">Gateway internals</a> 中 Delivery Path）：</p>
+      <ul>
+        <li><strong>直接回复</strong>——经来源平台适配器与原 chat 送回。</li>
+        <li><strong>Home channel</strong>——cron 与后台结果发到各平台配置的 home channel。</li>
+        <li><strong>显式目标</strong>——如 <code>telegram:-1001234567890</code>，供 <code>hermes send</code> 与 cron <code>deliver:</code> 使用。</li>
+        <li><strong>跨平台</strong>——投递到与入站不同的平台（路由依赖 <code>SessionStore</code> 中的会话上下文）。</li>
+      </ul>
+      <p>Cron 投递<strong>故意不</strong>镜像进 gateway 会话历史，只留在 cron 自己的会话里，避免角色交替违规。</p>
+      <p>每次<strong>最终</strong>平台 <code>send</code> 前后，<code>gateway/delivery_ledger.py</code> 在 <code>state.db</code> 记录可恢复义务（用户向语义见 <a class="inline" href="https://hermes-agent.nousresearch.com/docs/user-guide/messaging/">Messaging</a>）：</p>
       <ul>
         <li><code>record_obligation()</code> — 第一次 <code>send</code> 前，状态 <code>pending</code></li>
         <li><code>mark_attempting()</code> — await 前立刻标记</li>
         <li><code>mark_delivered()</code> / <code>mark_failed()</code> — 仅在明确的 <code>SendResult</code> 之后</li>
       </ul>
-      <p>语义是<strong>至少一次</strong>。模型已写完但 WhatsApp 还没确认时网关挂了，下次启动 <code>sweep_recoverable()</code> 会认领「原进程已死」的行，重发存好的正文，而不是整轮重跑（再付推理费）。进程仍活着时的 <code>failed</code> 行由带退避（30s / 2m / 10m）的重试 sweep 处理。线结果含糊时，恢复文案可能带前缀提示「可能是重复」——宁可提醒重复，也不静默丢答案。临时斜杠回复和空正文不进 ledger；接受崩溃丢回复可设 <code>gateway.delivery_ledger: false</code>。</p>
+      <p>语义是<strong>至少一次</strong>。模型已写完但 WhatsApp 还没确认时网关挂了，下次启动 <code>sweep_recoverable()</code> 会认领「原进程已死」的行，重发存好的正文，而不是整轮重跑。进程仍活着时的 <code>failed</code> 行由带退避（30s / 2m / 10m）的重试 sweep 处理。线结果含糊时，恢复文案可能带重复提示前缀。临时斜杠回复和空正文不进 ledger；接受崩溃丢回复可设 <code>gateway.delivery_ledger: false</code>。活跃 turn 标记与会话恢复协同：已持久化但未 ledger 的回复会变成可恢复行，而不是第二次完整推理。</p>
 
       <h2 id="circuit-breaker">熔断器</h2>
       <p>每个平台适配器外有一层<strong>熔断器</strong>。可重试失败反复出现——断连、限流、上游 5xx——会 trip：适配器暂停、打结构化日志，并可通知 home channel。与 delivery ledger（继续重试义务）不同，熔断器<strong>不会</strong>自动恢复；上游健康后需 <code>/platform resume &lt;platform&gt;</code> 手动恢复，避免长时间故障时疯狂重连。用 <code>/platform list</code> 和日志里的 <code>circuit breaker</code>、<code>paused</code> 排查。</p>
 
       <h2 id="prompt-cache">Prompt cache 与 Gateway 为何拥有会话边界</h2>
       <p>Anthropic 式 prompt caching 在稳定前缀和滚动 transcript 尾部打 <code>cache_control</code> 标记（<code>agent/prompt_caching.py</code>）。默认布局是 <strong>system-and-3</strong>：最多四个断点——静态 system 前缀、system 末尾、以及最后三条可缓存的非 system 消息——若配置了 <code>static_system_prefix</code> 还会再拆 system 块。阈值与卫生层见 <a class="inline" href="https://hermes-agent.nousresearch.com/docs/developer-guide/context-compression-and-caching">Context compression and caching</a>。</p>
-      <p>Gateway 必须拥有 <code>session_key</code> 的原因：</p>
+      <p>经济上的理由与会话一节呼应：</p>
       <ul>
-        <li><strong>Agent LRU 缓存</strong>（<code>gateway/run_agent_cache.py</code>）维护 <code>session_key → AIAgent</code>。复用实例让内存里的工具表和配置签名稳定；软淘汰会提交 memory，但不会换掉持久 transcript 的身份。</li>
-        <li><strong>缓存失效按 agent 实例全局生效</strong>——中途改 system 段、工具 schema 或模型路由会强制重建并冷写 cache。Gateway 每轮从 DB 读历史，但除非配置漂移，否则尽量不重建 agent。</li>
-        <li><strong>对平台无感的 agent</strong>——若错误共用 key，Telegram 和 Slack 会共用一条车道（不应发生）；每条车道有自己的 cached agent 和 cache 断点。多 profile 用命名空间（<code>agent:work:…</code>）避免互相污染前缀。</li>
+        <li>按 <code>session_key</code> 复用缓存的 <code>AIAgent</code>，让断点跨 turn 保持温热。</li>
+        <li>缓存失效按 agent 实例全局生效——改 system、工具 schema 或模型路由会强制重建并冷写。</li>
+        <li>多 profile 用命名空间（<code>agent:work:…</code>）避免互相污染前缀。</li>
       </ul>
-      <p>Gateway 会话卫生（约 85% 的 turn 前粗压）与 agent 内压缩（默认约 50%）是两层，但都假设 Gateway 已经决定<strong>打开哪条</strong>对话。Prompt caching 是经济上为何 agent 保持「每 turn 一次循环」，而 Gateway 管<strong>哪一条</strong>循环。</p>
+      <p>Gateway 会话卫生（约 85% 的 turn 前粗压）与 agent 内压缩（默认约 50%）是两层，但都假设 Gateway 已经决定<strong>打开哪条</strong>对话。</p>
 
       <h2 id="takeaways">小结</h2>
       <ul>
-        <li><strong>单一事件契约</strong>——适配器归一化为 <code>MessageEvent</code>；<code>build_session_key()</code> 命名车道。</li>
-        <li><strong>默认关闭</strong>——allowlist + DM pairing；除非某层显式放行。</li>
-        <li><strong>Busy 是策略</strong>——双层守卫 + <code>busy_input_mode</code>；<code>/stop</code>、<code>/queue</code> 是一等公民。</li>
-        <li><strong>回复扛得住崩溃</strong>——delivery ledger 重发终稿；熔断器暂停病适配器。</li>
-        <li><strong>缓存跟着会话边界走</strong>——按 <code>session_key</code> 的 agent 缓存与 system-and-3；不要手写 key。</li>
+        <li><strong>会话</strong>——<code>build_session_key()</code> 命名车道；<code>SessionStore</code> 映射 <code>session_id</code> 与 SQLite transcript；<code>run_agent_cache.py</code> 按 key LRU 复用 <code>AIAgent</code>。</li>
+        <li><strong>鉴权</strong>——有序放行层；DM pairing 在 <code>pairing.py</code>，默认关闭的 DM 入口。</li>
+        <li><strong>命令</strong>——<code>resolve_command()</code> + 命令表；turn 进行中靠 <code>busy_policy</code> 与内联 bypass。</li>
+        <li><strong>排队</strong>——适配器单槽 + runner busy 策略；<code>/queue</code> 经 <code>_queued_events</code> FIFO，一项一整轮。</li>
+        <li><strong>投递</strong>——<code>delivery.py</code> 路由出站；<code>delivery_ledger.py</code> 让终稿在崩溃后至少送达一次。</li>
       </ul>
       <p style="color:var(--muted);font-size:14px;">主要参考：<a class="inline" href="https://hermes-agent.nousresearch.com/docs/developer-guide/gateway-internals">Gateway internals</a>、<a class="inline" href="https://hermes-agent.nousresearch.com/docs/developer-guide/gateway-session-lifecycle">Session lifecycle</a>、<a class="inline" href="https://hermes-agent.nousresearch.com/docs/user-guide/messaging/">Messaging</a>、<a class="inline" href="https://hermes-agent.nousresearch.com/docs/developer-guide/context-compression-and-caching">Context compression and caching</a>。</p>
