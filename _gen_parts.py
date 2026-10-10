@@ -11,6 +11,9 @@ def _read_fragment(name: str) -> str:
     with open(path, encoding='utf-8') as f:
         return f.read()
 
+def _chapter_body(slug: str, lang: str, body: str) -> str:
+    return _read_fragment('%s-intro-%s.html' % (slug, lang)) + body
+
 _STYLE_PATH = '/tmp/_style.css'
 if not os.path.isfile(_STYLE_PATH):
     _STYLE_PATH = os.path.join(_ROOT, 'blogs', 'hermes-gateway-p1.html')
@@ -131,6 +134,14 @@ ARTICLE_TOC_CSS = """
     html { scroll-behavior: smooth; }
 """
 
+CHAPTER_INTRO_CSS = """
+    .chapter-intro::first-letter {
+      float: none !important; font-size: inherit !important; line-height: inherit !important;
+      padding: 0 !important; font-weight: inherit !important; color: inherit !important;
+      font-family: inherit !important;
+    }
+"""
+
 def gateway_article_toc(lang: str) -> str:
     if lang == 'zh':
         items = [
@@ -228,7 +239,7 @@ flowchart LR
       </pre>
       <figcaption>One agent loop; platform details stay in the Gateway and adapters.</figcaption>
     </figure>''',
-    'body': _read_fragment('gateway-body-en.html'),
+    'body': _chapter_body('gateway', 'en', _read_fragment('gateway-body-en.html')),
   },
   'zh': {
     'title': '消息网关：把平台与 Agent 彻底解耦',
@@ -245,7 +256,7 @@ flowchart LR
       </pre>
       <figcaption>Agent 只跑一轮对话；平台细节留在网关与适配器。</figcaption>
     </figure>''',
-    'body': _read_fragment('gateway-body-zh.html'),
+    'body': _chapter_body('gateway', 'zh', _read_fragment('gateway-body-zh.html')),
   },
  },
  'whatsapp': {
@@ -267,9 +278,7 @@ flowchart LR
       </pre>
       <figcaption>The WhatsApp path: a webhook delivers inbound messages; the Graph API carries replies back out.</figcaption>
     </figure>''',
-    'body': '''      <p>This is part 2 of a 4-part series (1: Message Gateway, 2: WhatsApp, 3: Self-Improving, 4: Long-Term Memory), based on the <strong>real source</strong> of <code>hermes-agent</code>. Here we go one level down into a concrete adapter: WhatsApp, which rides Meta's <strong>Cloud API</strong>.</p>
-
-      <h2>The Cloud API shape</h2>
+    'body': _chapter_body('whatsapp', 'en', '''      <h2>The Cloud API shape</h2>
       <p>WhatsApp uses a webhook to <em>receive</em> messages and the Graph API to <em>send</em> them. <code>WhatsAppCloudAdapter.connect()</code> (<code>gateway/platforms/whatsapp_cloud.py:435</code>) registers the webhook verification handshake and the inbound message callback. Once verified, every user message arrives as a webhook POST, gets normalized into a <code>MessageEvent</code>, and flows into the GatewayRunner we covered in part 1. For real, the method first <strong>refuses to start</strong> if deps or config are missing, then builds the two transports — an inbound webhook server and an outbound <code>httpx</code> client:</p>
       <pre class="src"><code>async def connect(self, *, is_reconnect: bool = False) -> bool:
     if not check_whatsapp_cloud_requirements():
@@ -313,7 +322,7 @@ flowchart TD
         <li><strong>Retry-resistance:</strong> <code>_dedup_wamid</code> stops redelivery from producing duplicate replies.</li>
         <li><strong>Failure containment:</strong> a failed <code>send()</code> logs and moves on — one bad message never kills the loop.</li>
         <li><strong>Mention gating:</strong> only @-mentions get a reply in groups, keeping it a helper, not a spammer.</li>
-      </ul>''',
+      </ul>'''),
   },
   'zh': {
     'title': 'WhatsApp 接入：Cloud API、Webhook 与失败隔离',
@@ -333,9 +342,7 @@ flowchart LR
       </pre>
       <figcaption>WhatsApp 路径：webhook 收消息，Graph API 把回复发回去。</figcaption>
     </figure>''',
-    'body': '''      <p>这是 4 篇系列的第 2 / 4 篇（1 消息网关、2 WhatsApp、3 自我进化、4 长期记忆），基于 <code>hermes-agent</code> 的<strong>真实源码</strong>。这里下钻到一个具体适配器：走 Meta <strong>Cloud API</strong> 的 WhatsApp。</p>
-
-      <h2>Cloud API 的形态</h2>
+    'body': _chapter_body('whatsapp', 'zh', '''      <h2>Cloud API 的形态</h2>
       <p>WhatsApp 用 webhook <em>收</em>消息、用 Graph API <em>发</em>消息。<code>WhatsAppCloudAdapter.connect()</code>（<code>gateway/platforms/whatsapp_cloud.py:435</code>）注册 webhook 校验握手与入站消息回调。校验通过后，每条用户消息以 webhook POST 到达，被归一化成 <code>MessageEvent</code>，流入第 1 篇讲的 GatewayRunner。真实代码里，它先<strong>拒绝启动</strong>（缺依赖或配置缺失就返回），再建两条传输——入站 webhook 服务、出站 <code>httpx</code> 客户端：</p>
       <pre class="src"><code>async def connect(self, *, is_reconnect: bool = False) -> bool:
     if not check_whatsapp_cloud_requirements():
@@ -379,7 +386,7 @@ flowchart TD
         <li><strong>抗重试：</strong><code>_dedup_wamid</code> 阻止重复投递产生重复回复。</li>
         <li><strong>失败隔离：</strong><code>send()</code> 失败只记日志不抛出——一条坏消息永不拖垮循环。</li>
         <li><strong>@ 门控：</strong>群里只有被 @ 才回，保持帮手定位，不做喷子。</li>
-      </ul>''',
+      </ul>'''),
   },
  },
  'self-improving': {
@@ -399,9 +406,7 @@ flowchart LR
       </pre>
       <figcaption>Self-improving is experience → skill → curator. The model never edits agent code.</figcaption>
     </figure>''',
-    'body': '''      <p>This is part 3 of a 4-part series (1: Message Gateway, 2: WhatsApp, 3: Self-Improving, 4: Long-Term Memory), based on the <strong>real source</strong> of <code>hermes-agent</code>. This is the most commonly misread part of the system, so let's be precise.</p>
-
-      <h2>What "self-improving" actually means</h2>
+    'body': _chapter_body('self-improving', 'en', '''      <h2>What "self-improving" actually means</h2>
       <p>Hermes's self-improvement does <strong>not</strong> let the model edit its own source online. Two things happen instead, through <strong>two independent tools</strong>:</p>
       <ul>
         <li><strong>Procedural memory &rarr; a skill.</strong> When the agent works out a reusable way to do a task, it calls <code>skill_manage(action="create")</code> and writes a <code>SKILL.md</code> into <code>~/.hermes/skills/</code>. Skills are narrow and actionable — "how to do X."</li>
@@ -462,7 +467,7 @@ flowchart TD
         <li><strong>Two tools, decoupled:</strong> <code>skill_manage</code> writes procedural <code>SKILL.md</code>; <code>memory</code> writes declarative <code>MEMORY.md</code> / <code>USER.md</code>. Creating a skill never auto-writes memory.</li>
         <li><strong>Nudged, not spontaneous:</strong> skill nudge (10 tool iterations) and memory nudge (10 user turns) summon a background review agent that decides what to save.</li>
         <li><strong>Curator is ops, not core:</strong> added later, it only maintains agent-created skills — merge / age / archive — and never touches memory.</li>
-      </ul>''',
+      </ul>'''),
   },
   'zh': {
     'title': '自我进化：把经验固化为 Skill',
@@ -480,9 +485,7 @@ flowchart LR
       </pre>
       <figcaption>自我进化是 经验 → skill → curator。模型从不去改 agent 代码。</figcaption>
     </figure>''',
-    'body': '''      <p>这是 4 篇系列的第 3 / 4 篇（1 消息网关、2 WhatsApp、3 自我进化、4 长期记忆），基于 <code>hermes-agent</code> 的<strong>真实源码</strong>。这是系统里最常被误读的一块，所以务必精确。</p>
-
-      <h2>"自我进化"到底指什么</h2>
+    'body': _chapter_body('self-improving', 'zh', '''      <h2>"自我进化"到底指什么</h2>
       <p>Hermes 的自我进化<strong>不是</strong>让模型在线改自己的源码，而是经由<strong>两个相互独立的工具</strong>发生两件事：</p>
       <ul>
         <li><strong>程序性记忆 &rarr; skill。</strong>当 agent 摸索出一种可复用的做法，它调 <code>skill_manage(action="create")</code>，把一个 <code>SKILL.md</code> 写进 <code>~/.hermes/skills/</code>。skill 是窄而可执行的——"怎么做 X"。</li>
@@ -543,7 +546,7 @@ flowchart TD
         <li><strong>两个工具，解耦：</strong><code>skill_manage</code> 写程序性的 <code>SKILL.md</code>；<code>memory</code> 写陈述性的 <code>MEMORY.md</code> / <code>USER.md</code>。创建 skill 不会自动写记忆。</li>
         <li><strong>靠 nudge，不靠自发：</strong>skill nudge（10 轮工具迭代）与 memory nudge（10 个 user turn）唤起后台 review agent 来决定存什么。</li>
         <li><strong>Curator 是运维，不是核心：</strong>后加的，只维护 agent 创建的 skill——合并/老化/归档——从不碰记忆。</li>
-      </ul>''',
+      </ul>'''),
   },
  },
  'memory': {
@@ -564,9 +567,7 @@ flowchart LR
       </pre>
       <figcaption>Two tracks: facts land on disk; sessions get a full-text index for cross-session retrieval.</figcaption>
     </figure>''',
-    'body': '''      <p>This is part 4 of 4 (1: Message Gateway, 2: WhatsApp, 3: Self-Improving, 4: Long-Term Memory), based on the <strong>real source</strong> of <code>hermes-agent</code>. Memory runs on two independent tracks.</p>
-
-      <h2>Fact memory</h2>
+    'body': _chapter_body('memory', 'en', '''      <h2>Fact memory</h2>
       <p>Facts flow through <code>MemoryManager → MemoryProvider</code> — a background thread, serial, de-noised. The simplest implementation, <code>MemoryStore</code> (<code>tools/memory_tool.py:159</code>), writes <code>MEMORY.md</code> straight to disk via <code>save_to_disk()</code> (<code>:387</code>). The method itself is tiny; the safety lives in <code>_write_file</code>, which uses an <strong>atomic temp-file + rename</strong> so concurrent readers never see a half-written file:</p>
       <pre class="src"><code>def save_to_disk(self, target: str):
     """Persist entries to the appropriate file. Called after every mutation."""
@@ -619,7 +620,7 @@ flowchart LR
         <li><strong>FTS5 + CJK:</strong> <code>messages_fts_cjk</code> is what makes <code>session_search</code> work across sessions, including Chinese text.</li>
         <li><strong>Concurrency fixed:</strong> the write path now reloads once and checks drift + parses on one snapshot, closing the clobber race.</li>
       </ul>
-      <p style="color:var(--muted);font-size:14px;">This closes the 4-part series. Every <code>file:line</code> reference comes from the current <code>hermes-agent</code> source and can be used as a coordinate to read along.</p>''',
+      <p style="color:var(--muted);font-size:14px;">This closes the 4-part series. Every <code>file:line</code> reference comes from the current <code>hermes-agent</code> source and can be used as a coordinate to read along.</p>'''),
   },
   'zh': {
     'title': '长期记忆：事实落盘，会话进 FTS5',
@@ -638,9 +639,7 @@ flowchart LR
       </pre>
       <figcaption>两条线：事实落盘；会话建全文索引以支持跨会话检索。</figcaption>
     </figure>''',
-    'body': '''      <p>这是第 4 / 4 篇（1 消息网关、2 WhatsApp、3 自我进化、4 长期记忆），基于 <code>hermes-agent</code> 的<strong>真实源码</strong>。记忆跑在两条独立的线上。</p>
-
-      <h2>事实记忆</h2>
+    'body': _chapter_body('memory', 'zh', '''      <h2>事实记忆</h2>
       <p>事实经 <code>MemoryManager → MemoryProvider</code>——后台线程、串行、去噪。最朴素的实现 <code>MemoryStore</code>（<code>tools/memory_tool.py:159</code>）通过 <code>save_to_disk()</code>（<code>:387</code>）把 <code>MEMORY.md</code> 直接落盘。方法本身很小；安全性在 <code>_write_file</code>：它用<strong>原子临时文件 + rename</strong>，并发读取者永远不会看到一个写一半的文件：</p>
       <pre class="src"><code>def save_to_disk(self, target: str):
     """Persist entries to the appropriate file. Called after every mutation."""
@@ -693,7 +692,7 @@ flowchart LR
         <li><strong>FTS5 + CJK：</strong><code>messages_fts_cjk</code> 让 <code>session_search</code> 能跨会话检索，含中文。</li>
         <li><strong>修过并发：</strong>写入路径现在只重读一次、在同一快照上做 drift 检测与解析，堵住了被覆盖的竞态。</li>
       </ul>
-      <p style="color:var(--muted);font-size:14px;">本系列到此结束。文中所有 <code>file:line</code> 引用均来自 <code>hermes-agent</code> 当前源码，可作对照阅读的坐标。</p>''',
+      <p style="color:var(--muted);font-size:14px;">本系列到此结束。文中所有 <code>file:line</code> 引用均来自 <code>hermes-agent</code> 当前源码，可作对照阅读的坐标。</p>'''),
   },
  },
 }
@@ -706,10 +705,7 @@ def generate_all_parts():
 
 def _write_part(slug, langs):
     for lang in ('en', 'zh'):
-        c = langs[lang]
-        # strip the leading "part N of 4-part series" intro paragraph
-        c = dict(c)
-        c['body'] = re.sub(r"^\s*<p>.*?</p>\s*\n", "", c['body'], flags=re.S)
+        c = dict(langs[lang])
         FNAMES = {'gateway': 'hermes-gateway-p1'}
         other_base = FNAMES.get(slug, 'hermes-%s' % slug)
         other = '%s-zh.html' % other_base if lang == 'en' else '%s.html' % other_base
@@ -731,7 +727,7 @@ def _write_part(slug, langs):
   {fonts}
   {head}
   {hljscss}
-  <style>{style}{seriescss}{srccss}{extracss}</style>
+  <style>{style}{seriescss}{srccss}{chapterintrocss}{extracss}</style>
 </head>
 <body class="blog-shell">
 {blogheader}
@@ -799,7 +795,7 @@ def _write_part(slug, langs):
         repl = {
             '{langattr}': langattr, '{lang}': lang, '{title}': c['title'], '{desc}': c['desc'],
             '{blogheadassets}': BLOG_HEAD_ASSETS, '{fonts}': FONTS, '{head}': HEAD, '{style}': STYLE, '{seriescss}': SERIES_CSS,
-            '{srccss}': SRC_CSS, '{blogheader}': BLOG_SITE_HEADER, '{eyebrow}': c['eyebrow'], '{h1}': c['h1'],
+            '{srccss}': SRC_CSS, '{chapterintrocss}': CHAPTER_INTRO_CSS, '{blogheader}': BLOG_SITE_HEADER, '{eyebrow}': c['eyebrow'], '{h1}': c['h1'],
             '{deck}': c['deck'], '{byline}': byline, '{extracss}': extra_css,
             '{articletoc}': article_toc, '{hero}': c['hero'], '{body}': c['body'],
             '{author}': author, '{langswitch}': lang_switch, '{zoom}': ZOOM,

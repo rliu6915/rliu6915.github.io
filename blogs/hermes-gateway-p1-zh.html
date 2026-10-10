@@ -206,6 +206,7 @@
     }
   
     
+    
     .series { margin-top: 56px; padding-top: 22px; border-top: 1px solid var(--border);
       font-family: Raleway, -apple-system, system-ui, sans-serif; font-size: 14px;
       color: var(--muted); text-align: center; line-height: 2; }
@@ -236,6 +237,12 @@
     pre.src .hljs-title, pre.src .hljs-title.function_, pre.src .hljs-function .hljs-title { color: #d2a8ff; }
     pre.src .hljs-number, pre.src .hljs-type { color: #79c0ff; }
     pre.src .hljs-attr, pre.src .hljs-params { color: #e3b341; }
+
+    .chapter-intro::first-letter {
+      float: none !important; font-size: inherit !important; line-height: inherit !important;
+      padding: 0 !important; font-weight: inherit !important; color: inherit !important;
+      font-family: inherit !important;
+    }
 
     .article-toc {
       margin: 0 0 48px; padding: 22px 24px;
@@ -319,6 +326,7 @@ flowchart LR
       <figcaption>Agent 只跑一轮对话；平台细节留在网关与适配器。</figcaption>
     </figure>
     <div data-od-id="body">
+      <p class="chapter-intro">聊天平台只提供 webhook 和发消息 API——不会替你管会话车道、配对或投递保证。<strong>平台适配器</strong>负责「接线」：校验回调、把各平台原始事件<strong>归一化</strong>成 <code>MessageEvent</code>，并在网关要求时把回复发回去。<strong>网关</strong>才是共用的 bot 层：<code>session_key</code>、鉴权、斜杠命令、忙碌时的排队与打断，以及用 delivery ledger 重试出站正文。Hermes <strong>CLI</strong> 不走网关，但跑的是同一个 <code>AIAgent</code> 轮次循环；接 Telegram、WhatsApp 等都要经过适配器 + <code>GatewayRunner</code>。没有这一层，每接一个平台就要自己重写会话路由、鉴权和投递。</p>
       <h2 id="entry-contract">入口契约</h2>
       <p>每个平台适配器——Telegram、Discord、Slack、WhatsApp、Signal 等——都走同一条入口：<code>gateway/platforms/base.py</code> 里的 <code>BasePlatformAdapter.handle_message</code>。职责只有一个：把平台原始事件<strong>归一化</strong>成 <code>MessageEvent</code>，再交给 <code>GatewayRunner._handle_message</code>。Agent 从来看不到「Telegram 更新」和「WhatsApp webhook」的差别，只看到一条类型化的事件流。模块地图见官方 <a class="inline" href="https://hermes-agent.nousresearch.com/docs/developer-guide/gateway-internals">Gateway internals</a>；本篇按一条消息走完对运维和贡献者最关键的路径。</p>
       <p>该方法<strong>立刻返回</strong>：真正的一轮对话在后台 task 里跑，webhook 线程不会被模型卡住，控制类命令也能在 turn 进行中插进来。</p>
