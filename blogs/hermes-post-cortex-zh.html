@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>post-cortex：Hermes 自托管语义长期记忆 — Daniel Liu</title>
+  <meta content="社区 memory provider post-cortex — 类型化记录、本地实体图与语义检索、轮次前召回、镜像 MEMORY.md 写入、多 profile workspace 映射与自托管 daemon 安装配置。" name="description" />
+    <link rel="icon" type="image/png" href="../assets/img/logo.png" />
+  <link href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,600,600i,700,700i|Raleway:300,300i,400,400i,500,500i,600,600i,700,700i|Poppins:300,300i,400,400i,500,500i,600,600i,700,700i" rel="stylesheet">
+  <link href="../assets/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="../assets/vendor/boxicons/css/boxicons.min.css" rel="stylesheet" />
+  <link href="../assets/css/style.css" rel="stylesheet" />
+  <link rel="stylesheet" href="blog.css" />
+  <link href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,600,600i,700,700i|Raleway:300,300i,400,400i,500,500i,600,600i,700,700i|Poppins:300,300i,400,400i,500,500i,600,600i,700,700i" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>document.addEventListener("DOMContentLoaded", function(){ if(window.mermaid){ mermaid.initialize({startOnLoad:true, theme:"dark", themeVariables:{fontSize:"15px"}}); } });</script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+  <style>
+    :root {
+      --bg: #010e1b;
+      --surface: #09203a;
+      --fg: #e8eef5;
+      --muted: #9aa6b2;
+      --border: rgba(255,255,255,.12);
+      --accent: #12d640;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font: 19px/1.7 Georgia, 'Iowan Old Style', 'Songti SC', serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    .wrap { max-width: 700px; margin: 0 auto; padding: 40px 28px 96px; }
+
+    /* Masthead */
+    nav.top {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 13px; letter-spacing: .04em;
+      display: flex; align-items: center; gap: 22px;
+      color: var(--muted); margin-bottom: 64px;
+      border-bottom: 1px solid var(--border); padding-bottom: 18px;
+    }
+    nav.top .wordmark { color: var(--fg); font-weight: 700; font-size: 15px; letter-spacing: .02em; }
+    nav.top a { color: var(--muted); text-decoration: none; transition: color .2s; }
+    nav.top a:hover, nav.top a.active { color: var(--accent); }
+
+    /* Article header */
+    .eyebrow {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 12px; text-transform: uppercase; letter-spacing: .12em;
+      color: var(--accent); margin-bottom: 16px;
+    }
+    h1 {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: clamp(34px, 5.4vw, 52px); line-height: 1.08;
+      letter-spacing: -0.02em; margin: 0 0 18px; color: #fff;
+    }
+    .deck {
+      font-size: 21px; line-height: 1.5; color: var(--muted);
+      margin: 0 0 28px; font-style: italic;
+    }
+    .byline {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 13.5px; color: var(--muted);
+      display: flex; align-items: center; gap: 12px; margin: 0 0 44px;
+    }
+    .byline .avatar {
+      width: 34px; height: 34px; border-radius: 50%;
+      background: var(--accent); color: #010e1b;
+      display: grid; place-items: center; font-weight: 700; font-size: 13px;
+      font-family: Raleway, sans-serif;
+    }
+
+    /* Hero diagram */
+    .hero-diagram {
+      margin: 0 0 48px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 28px; overflow-x: auto;
+    }
+    .hero-diagram .mermaid { font-size: 15px; }
+    .hero-diagram figcaption {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 12.5px; color: var(--muted); margin-top: 14px; text-align: center;
+    }
+
+    /* Body */
+    p { margin: 26px 0; }
+    p:first-of-type::first-letter {
+      float: left; font-size: 66px; line-height: .82;
+      padding: 6px 12px 0 0; font-weight: 700; color: var(--accent);
+      font-family: Georgia, serif;
+    }
+    h2 {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 27px; letter-spacing: -0.01em;
+      margin: 60px 0 14px; line-height: 1.25; color: #fff;
+    }
+    h3 {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 19px; color: var(--accent); margin: 34px 0 8px;
+    }
+    a.inline { color: var(--accent); text-decoration: none; border-bottom: 1px solid rgba(18,214,64,.4); }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      background: var(--surface); border: 1px solid var(--border);
+      padding: 1px 5px; border-radius: 4px; font-size: .82em; color: #b8f5c8;
+    }
+    ul, ol { color: var(--fg); line-height: 1.8; margin: 20px 0; padding-left: 24px; }
+    li { margin-bottom: 8px; }
+
+    /* Pull quote */
+    blockquote.pull {
+      margin: 44px 0; padding: 4px 0 4px 30px;
+      font-size: 25px; line-height: 1.42; color: #fff;
+      border-left: 3px solid var(--accent); font-style: italic;
+      font-family: Georgia, 'Songti SC', serif;
+    }
+    /* Inline blockquote */
+    blockquote.inline {
+      margin: 36px 0; padding: 16px 22px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--muted); font-size: 16px; line-height: 1.6;
+    }
+
+    /* Diagram figure */
+    figure.diagram { margin: 44px 0; }
+    figure.diagram .mermaid {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 22px; overflow-x: auto;
+    }
+    figure.diagram figcaption {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 12.5px; color: var(--muted); margin-top: 10px; text-align: center;
+    }
+
+    /* Author footer */
+    .author {
+      margin-top: 72px; padding-top: 28px; border-top: 1px solid var(--border);
+      display: flex; gap: 16px; align-items: flex-start;
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+    }
+    .author .avatar {
+      flex: 0 0 auto; width: 48px; height: 48px; border-radius: 50%;
+      background: var(--accent); color: #010e1b; display: grid; place-items: center;
+      font-weight: 700; font-family: Raleway, sans-serif;
+    }
+    .author .bio { font-size: 14px; color: var(--muted); line-height: 1.6; }
+    .author .bio strong { color: var(--fg); display: block; margin-bottom: 4px; font-size: 15px; }
+
+    /* Related */
+    .related { margin-top: 64px; }
+    .related h4 {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 13px; text-transform: uppercase; letter-spacing: .1em;
+      color: var(--muted); margin: 0 0 20px;
+    }
+    .related .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
+    .related .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; overflow: hidden; text-decoration: none; color: inherit;
+      transition: transform .2s, border-color .2s; display: block;
+    }
+    .related .card:hover { transform: translateY(-3px); border-color: var(--accent); }
+    .related .card .thumb { aspect-ratio: 16/9; background: linear-gradient(135deg, #0a2540, #04101f); }
+    .related .card .body { padding: 14px 14px 16px; }
+    .related .card .title {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 14.5px; font-weight: 600; color: var(--fg); line-height: 1.35;
+    }
+    .related .card:hover .title { color: var(--accent); }
+    .related .card .excerpt { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
+    .related .card .date {
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 11px; color: var(--muted); margin-top: 8px;
+    }
+
+    /* Language switch */
+    .lang-switch {
+      margin-top: 56px; padding-top: 24px; border-top: 1px solid var(--border);
+      font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 15px; color: var(--muted); text-align: center;
+    }
+    .lang-switch a {
+      color: var(--accent); text-decoration: none;
+      border-bottom: 1px solid rgba(18,214,64,.4);
+    }
+
+    /* Click-to-zoom for diagrams */
+    .mermaid { cursor: zoom-in; }
+    .zoom-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.85);
+      display: none; align-items: center; justify-content: center;
+      z-index: 9999; padding: 40px; cursor: zoom-out;
+    }
+    .zoom-overlay.open { display: flex; }
+    .zoom-overlay svg {
+      max-width: 95vw; max-height: 90vh; width: auto; height: auto;
+      background: var(--surface); border-radius: 12px; padding: 24px;
+    }
+
+    @media (max-width: 640px) {
+      .related .grid { grid-template-columns: 1fr; }
+      nav.top { flex-wrap: wrap; gap: 12px 18px; }
+    }
+  
+    
+    
+    
+    .series { margin-top: 56px; padding-top: 22px; border-top: 1px solid var(--border);
+      font-family: Raleway, -apple-system, system-ui, sans-serif; font-size: 14px;
+      color: var(--muted); text-align: center; line-height: 2; }
+    .series a { color: var(--muted); text-decoration: none; }
+    .series a:hover { color: var(--accent); }
+    .series a.cur { color: var(--accent); font-weight: 600; }
+
+    .src-wrap { margin: 22px 0; }
+    .src-bar { display: flex; justify-content: space-between; align-items: center;
+      background: #161b22; border: 1px solid var(--border); border-bottom: none;
+      border-radius: 10px 10px 0 0; padding: 7px 14px; }
+    .src-lang { font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 12px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+    .src-copy { font-family: Raleway, -apple-system, system-ui, sans-serif;
+      font-size: 12px; color: var(--muted); background: transparent;
+      border: 1px solid var(--border); border-radius: 6px; padding: 3px 11px;
+      cursor: pointer; transition: color .15s, border-color .15s; }
+    .src-copy:hover { color: var(--accent); border-color: var(--accent); }
+    pre.src { background: #0e1117; border: 1px solid var(--border); border-radius: 0 0 10px 10px;
+      padding: 18px 20px; overflow-x: auto; margin: 0; }
+    pre.src code { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 13px; line-height: 1.7; color: #d7dde8; white-space: pre; }
+    /* highlight.js token colors tuned to the block's dark theme */
+    pre.src code.hljs { background: transparent; padding: 0; }
+    pre.src .hljs-keyword, pre.src .hljs-built_in { color: #ff7b72; }
+    pre.src .hljs-string, pre.src .hljs-comment { color: #a5d6ff; }
+    pre.src .hljs-comment { font-style: italic; opacity: .8; }
+    pre.src .hljs-title, pre.src .hljs-title.function_, pre.src .hljs-function .hljs-title { color: #d2a8ff; }
+    pre.src .hljs-number, pre.src .hljs-type { color: #79c0ff; }
+    pre.src .hljs-attr, pre.src .hljs-params { color: #e3b341; }
+
+    .chapter-intro::first-letter {
+      float: none !important; font-size: inherit !important; line-height: inherit !important;
+      padding: 0 !important; font-weight: inherit !important; color: inherit !important;
+      font-family: inherit !important;
+    }
+</style>
+</head>
+<body class="blog-shell">
+  <header id="header" class="header-top">
+    <div class="container">
+      <h1><a href="../index.html">Daniel Liu</a></h1>
+      <nav class="nav-menu d-none d-lg-block">
+        <ul>
+          <li><a href="../index.html"><span>About</span></a></li>
+          <li class="active"><a href="index.html"><span>Blog</span></a></li>
+          <li><a href="../index.html#projects"><span>Projects</span></a></li>
+          <li><a href="../index.html#toy-projects"><span>Toy Projects</span></a></li>
+        </ul>
+      </nav>
+      <div class="social-links">
+        <a href="mailto:rliu6915@163.com" target="_blank" class="google" rel="noopener"><i class="bx bxl-google"></i></a>
+        <a href="https://github.com/rliu6915" target="_blank" class="github" rel="noopener"><i class="bx bxl-github"></i></a>
+      </div>
+    </div>
+  </header>
+  <article class="wrap">
+    <div class="eyebrow" data-od-id="headline">Hermes 深潜 &middot; 社区记忆</div>
+    <h1 data-od-id="headline">post-cortex：Hermes 自托管语义长期记忆</h1>
+    <p class="deck" data-od-id="headline">post-cortex 插件与 daemon 如何为 Hermes 提供结构化、可共享的语义长期记忆——不替代内置 MEMORY.md，也不改写网关架构叙事。</p>
+        <div class="byline">
+      <div class="avatar">DL</div>
+      <span>By Daniel Liu &middot; October 18, 2026 &middot; 12 min read</span>
+    </div>
+    
+        <figure class="hero-diagram">
+      <pre class="mermaid">
+flowchart LR
+  H["Hermes Agent"] <-->|HTTP| P["post-cortex 插件"]
+  P <-->|记录 / 检索| D["post-cortex daemon"]
+  D --> DB["RocksDB 或 SurrealDB + 本地 embedding"]
+      </pre>
+      <figcaption>插件跑在 Agent 进程内；图与向量落在你可控网络上的 daemon。</figcaption>
+    </figure>
+    <div data-od-id="body">
+      <p class="chapter-intro">Hermes 自带<strong>内置</strong>长期记忆——<code>MEMORY.md</code> 事实与 <code>SessionDB</code> FTS5 检索（见架构系列 <a class="inline" href="hermes-memory-zh.html">第 4 篇</a>）。<strong>post-cortex</strong> 是另一套社区记忆 <em>provider</em>：Hermes 插件 + 自托管 daemon，把<strong>类型化记录</strong>写入实体图并用<strong>本地语义检索</strong>召回。数据留在你可控的机器上（RocksDB 或 SurrealDB、本地 embedding）。本篇为独立深潜，不是四篇网关系列的「第 5 章」。</p>
+      <h2>为什么另起一套？</h2>
+      <p>Hermes 内置记忆刻意保持简单：事实写 markdown，会话用 SQLite FTS5。post-cortex 面向需要<strong>结构化</strong>知识（决策、已修复问题、代码变更、需求、定义）、每轮前<strong>语义召回</strong>、以及跨 profile / 客户端<strong>共享 workspace</strong> 且数据留在本地的场景。插件已进 <a class="inline" href="https://github.com/NousResearch/hermes-agent/commit/27ebb9be2678583725e57228e9c84b36b601320d">hermes-agent plugin-catalog</a>；代码在 <a class="inline" href="https://github.com/julymetodiev/hermes-plugin-post-cortex">hermes-plugin-post-cortex</a> 与 <a class="inline" href="https://github.com/julymetodiev/post-cortex">post-cortex</a>（Rust daemon）。</p>
+
+      <h2>架构：插件、daemon、workspace</h2>
+      <p>每个 Hermes profile 通过 HTTP 连一个 daemon（默认 <code>http://127.0.0.1:3737</code>）。插件用 <code>post-cortex.json</code> 里的 glob 把 profile 名映射到 <strong>workspace</strong>，并打开每 profile 一条 session（默认 <code>hermes:{profile}</code>）。记录带类型化实体与关系；daemon 用本地模型做 embedding 与混合检索。除你配置的远程 URL 外，数据不离开自有环境。</p>
+
+      <figure class="diagram">
+        <pre class="mermaid">
+sequenceDiagram
+  participant U as 用户消息
+  participant H as Hermes 轮次
+  participant P as post-cortex 插件
+  participant D as Daemon
+  U->>H: 新轮次
+  H->>P: 语义召回（workspace）
+  P->>D: 检索请求
+  D-->>P: 命中（按分数过滤）
+  P-->>H: 注入最多约 5 条记录
+  H->>H: 模型与工具
+  H->>P: 镜像 memory 写入（主 Agent）
+  P->>D: 追加类型化记录
+        </pre>
+        <figcaption>图 1 — 模型前先召回；内置 memory 工具写入可镜像到 post-cortex。</figcaption>
+      </figure>
+
+      <h2>轮次前召回</h2>
+      <p><code>auto_recall</code> 开启时，每轮开始前对 profile 对应 workspace 做语义检索。弱相关、空实体描述及 <code>skip_patterns</code> 命中的噪声会丢弃。高于 <code>min_score</code>（默认 0.62）的记录最多注入 <code>max_items</code>（默认 5）条，并按 <code>item_chars</code> 截断。daemon 慢或不可达时在 <code>timeout_s</code> 后跳过召回，轮次照常进行。</p>
+
+      <h2>工具与 skill</h2>
+      <ul>
+        <li><code>post_cortex_search</code> — 对记录（及可选 capture 消息）做语义搜索。</li>
+        <li><code>post_cortex_record</code> — 写入类型化记录进图。</li>
+        <li><code>post_cortex_context</code> — 指定组件的邻域与反向依赖。</li>
+        <li><code>skill_view("post-cortex:memory")</code> — 记录格式与检索提示（<code>post-cortex:memory</code> skill）。</li>
+      </ul>
+      <p>daemon <strong>0.5+</strong> 支持 <strong>cards</strong>（用户卡与项目卡写入 system prompt）、<strong>authorship</strong>（记录带 <code>hermes:{profile}</code>）、以及可选 <strong>capture</strong> 把完成的轮次写入消息流（仅主 Agent；cron 与子 Agent 不会自动写入）。</p>
+
+      <h2>镜像内置 memory</h2>
+      <p><code>mirror_memory_writes: true</code> 时，主 Agent 通过 Hermes 内置 <code>memory</code> 工具保存的内容会同步为 post-cortex 记录。cron 与子 Agent <strong>不会</strong>自动镜像。</p>
+
+      <h2>多 profile 与 workspace</h2>
+      <p><code>workspaces</code> 用 profile 名 glob 映射到共享 workspace，先匹配者优先。例如 <code>{"ops-*": "Ops", "dev-*": "MyProject", "*": "hermes"}</code>。同一项目上的其他 post-cortex 客户端也可读同一 workspace。</p>
+
+      <h2>安装与版本</h2>
+      <ul>
+        <li><strong>Hermes</strong> &ge; 0.22.2；<strong>daemon</strong> &ge; 0.4.0（cards、authorship、capture 需 0.5.0）。</li>
+        <li><code>hermes plugins install post-cortex</code>，再 <code>hermes memory setup</code>（或在 profile <code>config.yaml</code> 设 <code>memory.provider: post-cortex</code>）。</li>
+        <li>启动 daemon：<code>pcx start</code>；用 <code>hermes memory status</code> 检查连通性。</li>
+      </ul>
+
+      <h2>密钥与配置</h2>
+      <p>本地选项仅在 <code>$HERMES_HOME/post-cortex.json</code>。<code>PCX_TOKEN</code> 走 Hermes <strong>secret scope</strong>，不会写入该 JSON。默认本机 URL；远程 daemon 需对齐 <code>auth_token</code>、<code>PCX_TOKEN</code> 与 daemon <code>allowed_hosts</code>。</p>
+      <blockquote class="inline">最小示例：<code>{"url": "http://127.0.0.1:3737", "workspaces": {"*": "hermes"}, "auto_recall": true, "mirror_memory_writes": true}</code> — 完整键表见插件 README。</blockquote>
+
+      <h2>小结</h2>
+      <ul>
+        <li><strong>可选 provider：</strong>补充 <code>MEMORY.md</code> / FTS5，经 <code>memory.provider</code> 切换，不改网关主线。</li>
+        <li><strong>结构化 + 语义：</strong>自托管 daemon 上的实体图与本地 embedding；每轮注入少量高分上下文。</li>
+        <li><strong>workspace 共享：</strong>glob 映射多 profile 与其他客户端。</li>
+        <li><strong>主 Agent 写入：</strong>镜像 memory 与可选 capture；子 Agent / cron 不走自动写路径。</li>
+      </ul>
+    </div>
+    <div class="related">
+      <h4>相关阅读</h4>
+      <div class="grid">
+        <a class="card" href="hermes-memory-zh.html">
+          <div class="thumb"></div>
+          <div class="body">
+            <div class="title">长期记忆：磁盘事实与会话 FTS5</div>
+            <div class="excerpt">架构系列第 4 篇 — 内置 MEMORY.md 与 SessionDB 两条记忆线。</div>
+            <div class="date">2026 年 8 月</div>
+          </div>
+        </a>
+        <a class="card" href="https://github.com/julymetodiev/hermes-plugin-post-cortex" target="_blank" rel="noopener">
+          <div class="thumb"></div>
+          <div class="body">
+            <div class="title">hermes-plugin-post-cortex</div>
+            <div class="excerpt">插件源码、配置说明与 Hermes catalog 安装方式。</div>
+            <div class="date">GitHub</div>
+          </div>
+        </a>
+      </div>
+    </div>
+        <div class="author">
+      <div class="avatar">DL</div>
+      <div class="bio">
+        <strong>Daniel Liu</strong>
+        软件工程师，写 AI Agent、基础设施，以及把它们接进日常聊天软件的小工具。这个博客记录边做边学的东西。
+      </div>
+    </div>
+    <p class="lang-switch">Read in English? <a href="hermes-post-cortex.html">Read this article in English &rarr;</a></p>
+  </article>
+    <div class="zoom-overlay" id="zoomOverlay" aria-hidden="true"></div>
+  <script>
+    (function () {
+      var zoomOverlay = document.getElementById('zoomOverlay');
+      if (!zoomOverlay) return;
+      function closeZoom() {
+        zoomOverlay.classList.remove('open');
+        zoomOverlay.innerHTML = '';
+        zoomOverlay.setAttribute('aria-hidden', 'true');
+      }
+      document.querySelectorAll('.mermaid').forEach(function (el) {
+        el.addEventListener('click', function () {
+          var svg = el.querySelector('svg');
+          if (!svg) return;
+          zoomOverlay.innerHTML = '';
+          zoomOverlay.appendChild(svg.cloneNode(true));
+          zoomOverlay.classList.add('open');
+          zoomOverlay.setAttribute('aria-hidden', 'false');
+        });
+      });
+      zoomOverlay.addEventListener('click', closeZoom);
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') closeZoom();
+      });
+    })();
+  </script>
+
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>document.addEventListener('DOMContentLoaded', function () { if (window.hljs) hljs.highlightAll(); });</script>
+  <script>
+    (function () {
+      var isZh = document.documentElement.lang === 'zh-CN';
+      var COPY = isZh ? '复制' : 'Copy';
+      var COPIED = isZh ? '已复制' : 'Copied';
+      document.querySelectorAll('pre.src').forEach(function (pre) {
+        var code = pre.querySelector('code');
+        if (code && !/language-/.test(code.className)) code.className = 'language-python';
+        if (window.hljs && code) { try { window.hljs.highlightElement(code); } catch (e) {} }
+        var wrap = document.createElement('div');
+        wrap.className = 'src-wrap';
+        pre.parentNode.insertBefore(wrap, pre);
+        wrap.appendChild(pre);
+        var bar = document.createElement('div');
+        bar.className = 'src-bar';
+        var lang = document.createElement('span');
+        lang.className = 'src-lang';
+        lang.textContent = 'Python';
+        var btn = document.createElement('button');
+        btn.className = 'src-copy';
+        btn.type = 'button';
+        btn.textContent = COPY;
+        btn.addEventListener('click', function () {
+          var t = code ? code.innerText : pre.innerText;
+          var done = function () { btn.textContent = COPIED; setTimeout(function () { btn.textContent = COPY; }, 1500); };
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(t).then(done, function () { fallbackCopy(t, btn, COPY, COPIED); });
+          } else { fallbackCopy(t, btn, COPY, COPIED); }
+        });
+        bar.appendChild(lang);
+        bar.appendChild(btn);
+        wrap.insertBefore(bar, pre);
+      });
+      function fallbackCopy(text, btn, copy, copied) {
+        var ta = document.createElement('textarea');
+        ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'; ta.style.top = '0';
+        document.body.appendChild(ta); ta.focus(); ta.select();
+        try { document.execCommand('copy'); btn.textContent = copied; } catch (e) {}
+        document.body.removeChild(ta);
+        setTimeout(function () { btn.textContent = copy; }, 1500);
+      }
+    })();
+  </script>
+</body>
+</html>

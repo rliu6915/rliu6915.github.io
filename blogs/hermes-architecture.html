@@ -201,6 +201,7 @@
   
     
     
+    
     .series { margin-top: 56px; padding-top: 22px; border-top: 1px solid var(--border);
       font-family: Raleway, -apple-system, system-ui, sans-serif; font-size: 14px;
       color: var(--muted); text-align: center; line-height: 2; }
@@ -696,6 +697,8 @@ flowchart LR
         <li><strong>FTS5 + CJK:</strong> <code>messages_fts_cjk</code> is what makes <code>session_search</code> work across sessions, including Chinese text.</li>
         <li><strong>Concurrency fixed:</strong> the write path now reloads once and checks drift + parses on one snapshot, closing the clobber race.</li>
       </ul>
+      <h2>Going further: post-cortex</h2>
+      <p>Built-in memory covers <code>MEMORY.md</code> and session FTS5. The community plugin <a class="inline" href="hermes-post-cortex.html">post-cortex</a> (<a class="inline" href="https://github.com/NousResearch/hermes-agent/commit/27ebb9be2678583725e57228e9c84b36b601320d">catalog entry</a>) is an <strong>optional</strong> memory provider: typed records, local semantic search, and shared workspaces on a daemon you host. It complements this chapter; it is not part of the four-part gateway series.</p>
       <p style="color:var(--muted);font-size:14px;">This closes the 4-part series. Every <code>file:line</code> reference comes from the current <code>hermes-agent</code> source and can be used as a coordinate to read along.</p>
     </div>
     <div class="sec-foot">
