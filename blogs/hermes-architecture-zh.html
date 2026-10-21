@@ -201,6 +201,7 @@
   
     
     
+    
     .series { margin-top: 56px; padding-top: 22px; border-top: 1px solid var(--border);
       font-family: Raleway, -apple-system, system-ui, sans-serif; font-size: 14px;
       color: var(--muted); text-align: center; line-height: 2; }
@@ -696,6 +697,8 @@ flowchart LR
         <li><strong>FTS5 + CJK：</strong><code>messages_fts_cjk</code> 让 <code>session_search</code> 能跨会话检索，含中文。</li>
         <li><strong>修过并发：</strong>写入路径现在只重读一次、在同一快照上做 drift 检测与解析，堵住了被覆盖的竞态。</li>
       </ul>
+      <h2>延伸阅读：post-cortex</h2>
+      <p>内置记忆覆盖 <code>MEMORY.md</code> 与会话 FTS5。社区插件 <a class="inline" href="hermes-post-cortex-zh.html">post-cortex</a>（<a class="inline" href="https://github.com/NousResearch/hermes-agent/commit/27ebb9be2678583725e57228e9c84b36b601320d">catalog 收录</a>）是<strong>可选</strong> memory provider：类型化记录、本地语义检索、自托管 daemon 上的共享 workspace。它补充本篇内容，不属于四篇网关系列。</p>
       <p style="color:var(--muted);font-size:14px;">本系列到此结束。文中所有 <code>file:line</code> 引用均来自 <code>hermes-agent</code> 当前源码，可作对照阅读的坐标。</p>
     </div>
     <div class="sec-foot">
