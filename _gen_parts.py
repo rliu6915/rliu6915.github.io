@@ -110,50 +110,7 @@ POST_CORTEX_BYLINE = """    <div class="byline">
       <span>By Daniel Liu &middot; October 18, 2026 &middot; 12 min read</span>
     </div>"""
 
-def related_cards(lang: str) -> str:
-    if lang == 'zh':
-        return '''    <div class="related">
-      <h4>相关阅读</h4>
-      <div class="grid">
-        <a class="card" href="hermes-memory-zh.html">
-          <div class="thumb"></div>
-          <div class="body">
-            <div class="title">长期记忆：磁盘事实与会话 FTS5</div>
-            <div class="excerpt">架构系列第 4 篇 — 内置 MEMORY.md 与 SessionDB 两条记忆线。</div>
-            <div class="date">2026 年 8 月</div>
-          </div>
-        </a>
-        <a class="card" href="https://github.com/julymetodiev/hermes-plugin-post-cortex" target="_blank" rel="noopener">
-          <div class="thumb"></div>
-          <div class="body">
-            <div class="title">hermes-plugin-post-cortex</div>
-            <div class="excerpt">插件源码、配置说明与 Hermes catalog 安装方式。</div>
-            <div class="date">GitHub</div>
-          </div>
-        </a>
-      </div>
-    </div>'''
-    return '''    <div class="related">
-      <h4>Related</h4>
-      <div class="grid">
-        <a class="card" href="hermes-memory.html">
-          <div class="thumb"></div>
-          <div class="body">
-            <div class="title">Long-Term Memory: Facts on Disk, Sessions in FTS5</div>
-            <div class="excerpt">Architecture series Part 4 — built-in MEMORY.md and SessionDB tracks.</div>
-            <div class="date">August 2026</div>
-          </div>
-        </a>
-        <a class="card" href="https://github.com/julymetodiev/hermes-plugin-post-cortex" target="_blank" rel="noopener">
-          <div class="thumb"></div>
-          <div class="body">
-            <div class="title">hermes-plugin-post-cortex</div>
-            <div class="excerpt">Plugin source, configuration reference, and catalog install.</div>
-            <div class="date">GitHub</div>
-          </div>
-        </a>
-      </div>
-    </div>'''
+ARCH_PART_SLUGS = frozenset({'gateway', 'whatsapp', 'self-improving', 'memory', 'post-cortex'})
 
 ARTICLE_TOC_CSS = """
     .article-toc {
@@ -253,20 +210,27 @@ AUTHOR_ZH = """    <div class="author">
 
 SERIES_EN = {
  'gateway': '1 &middot; Gateway', 'whatsapp': '2 &middot; WhatsApp',
- 'self-improving': '3 &middot; Self-Improving', 'memory': '4 &middot; Memory'}
+ 'self-improving': '3 &middot; Self-Improving', 'memory': '4 &middot; Memory',
+ 'post-cortex': '5 &middot; post-cortex'}
 SERIES_ZH = {
  'gateway': '1 &middot; 网关', 'whatsapp': '2 &middot; WhatsApp',
- 'self-improving': '3 &middot; 自我进化', 'memory': '4 &middot; 记忆'}
+ 'self-improving': '3 &middot; 自我进化', 'memory': '4 &middot; 记忆',
+ 'post-cortex': '5 &middot; post-cortex'}
+
+def _part_page(slug: str, lang: str) -> str:
+    FNAMES = {'gateway': 'hermes-gateway-p1'}
+    base = FNAMES.get(slug, 'hermes-%s' % slug)
+    return '%s%s.html' % (base, '' if lang == 'en' else '-zh')
 
 def series(cur, lang):
-    order = ['gateway','whatsapp','self-improving','memory']
-    label = SERIES_EN if lang=='en' else SERIES_ZH
+    order = ['gateway', 'whatsapp', 'self-improving', 'memory', 'post-cortex']
+    label = SERIES_EN if lang == 'en' else SERIES_ZH
     parts = []
     for s in order:
-        cls = ' class="cur"' if s==cur else ''
-        parts.append('<a href="hermes-%s.html"%s>%s</a>' % (s, cls, label[s]))
-    prefix = 'Part of a 4-part series: ' if lang=='en' else '本系列共 4 篇：'
-    return '<p class="series">%s%s</p>' % (prefix, ' &middot; '.join(parts))
+        cls = ' class="cur"' if s == cur else ''
+        parts.append('<a href="%s"%s>%s</a>' % (_part_page(s, lang), cls, label[s]))
+    prefix = 'Part of a 5-part series: ' if lang == 'en' else '本系列共 5 篇：'
+    return '    %s' % ('<p class="series">%s%s</p>' % (prefix, ' &middot; '.join(parts)))
 
 # ---------- content ----------
 # Conventions:
@@ -279,7 +243,7 @@ CONTENT = {
   'en': {
     'title': 'The Message Gateway: Decoupling Platforms from the Agent',
     'desc': 'Session (key + SessionStore + agent LRU), auth, slash commands, queue, and delivery (delivery.py + ledger) — a source-grounded tour of Hermes GatewayRunner with links to official gateway docs.',
-    'eyebrow': 'Architecture &middot; Part 1 of 4',
+    'eyebrow': 'Architecture &middot; Part 1 of 5',
     'h1': 'The Message Gateway: Decoupling Platforms from the Agent',
     'deck': 'From MessageEvent normalization through session key and SessionStore, ordered auth and DM pairing, slash resolve and busy_policy, dual-layer queueing with /queue FIFO, and delivery.py plus the ledger — how GatewayRunner keeps 20+ platforms on one agent loop.',
     'hero': '''    <figure class="hero-diagram">
@@ -296,7 +260,7 @@ flowchart LR
   'zh': {
     'title': '消息网关：把平台与 Agent 彻底解耦',
     'desc': '会话（key + SessionStore + agent LRU）、鉴权、斜杠命令、排队与投递（delivery.py + ledger）——链到官方 gateway 文档与源码的 GatewayRunner 深潜。',
-    'eyebrow': '架构 &middot; 第 1 / 4 篇',
+    'eyebrow': '架构 &middot; 第 1 / 5 篇',
     'h1': '消息网关：把平台与 Agent 彻底解耦',
     'deck': '从 MessageEvent 归一化、session key 与 SessionStore、有序鉴权与 DM pairing、斜杠解析与 busy_policy、双层排队与 /queue FIFO、delivery.py 与 ledger——GatewayRunner 如何把 20+ 平台接到同一条 agent 循环上。',
     'hero': '''    <figure class="hero-diagram">
@@ -315,7 +279,7 @@ flowchart LR
   'en': {
     'title': 'WhatsApp Integration: Cloud API, Webhooks, and Failure Isolation',
     'desc': 'Walking the Meta Cloud API path: webhook ingestion, Graph API delivery, and the three engineering details that keep a group chat from becoming a spam bot.',
-    'eyebrow': 'Architecture &middot; Part 2 of 4',
+    'eyebrow': 'Architecture &middot; Part 2 of 5',
     'h1': 'WhatsApp Integration: Cloud API, Webhooks, and Failure Isolation',
     'deck': "A source-grounded walk through Hermes's WhatsApp path — and the retry-, failure-, and mention-handling details that make it safe in a busy group chat.",
     'hero': '''    <figure class="hero-diagram">
@@ -379,7 +343,7 @@ flowchart TD
   'zh': {
     'title': 'WhatsApp 接入：Cloud API、Webhook 与失败隔离',
     'desc': '走一遍 Meta Cloud API 路径：webhook 收消息、Graph API 发消息，以及让群聊不至于变成垃圾机器人的三个工程细节。',
-    'eyebrow': '架构 &middot; 第 2 / 4 篇',
+    'eyebrow': '架构 &middot; 第 2 / 5 篇',
     'h1': 'WhatsApp 接入：Cloud API、Webhook 与失败隔离',
     'deck': '基于真实源码拆解 Hermes 的 WhatsApp 路径——以及抗重试、抗错误扩散、@ 提及门控这些让它在嘈杂群聊里安全的细节。',
     'hero': '''    <figure class="hero-diagram">
@@ -445,7 +409,7 @@ flowchart TD
   'en': {
     'title': 'Self-Improving: Crystallizing Experience into Skills',
     'desc': 'The most-misread part of Hermes. Self-improvement is not the model editing code — it is the Curator turning hard-won experience into reusable skills.',
-    'eyebrow': 'Architecture &middot; Part 3 of 4',
+    'eyebrow': 'Architecture &middot; Part 3 of 5',
     'h1': 'Self-Improving: Crystallizing Experience into Skills',
     'deck': 'A source-grounded look at the Curator — a pure-function state machine that turns experience into skills, with optional LLM merge and zero cost by default.',
     'hero': '''    <figure class="hero-diagram">
@@ -524,7 +488,7 @@ flowchart TD
   'zh': {
     'title': '自我进化：把经验固化为 Skill',
     'desc': 'Hermes 最常被误读的部分。自我进化不是让模型改自己的代码，而是 Curator 把来之不易的经验固化成可复用的 skill。',
-    'eyebrow': '架构 &middot; 第 3 / 4 篇',
+    'eyebrow': '架构 &middot; 第 3 / 5 篇',
     'h1': '自我进化：把经验固化为 Skill',
     'deck': '基于真实源码看 Curator——一个纯函数状态机，把经验变成 skill，默认零成本、可选 LLM 合并。',
     'hero': '''    <figure class="hero-diagram">
@@ -605,7 +569,7 @@ flowchart TD
   'en': {
     'title': 'Long-Term Memory: Facts on Disk, Sessions in FTS5',
     'desc': 'Two memory tracks: durable facts through MemoryManager to Provider (and the simplest MemoryStore writing MEMORY.md), and cross-session recall through SessionDB + FTS5.',
-    'eyebrow': 'Architecture &middot; Part 4 of 4',
+    'eyebrow': 'Architecture &middot; Part 4 of 5',
     'h1': 'Long-Term Memory: Facts on Disk, Sessions in FTS5',
     'deck': "A source-grounded tour of Hermes's two memory tracks — fact memory written to disk, and session memory indexed for cross-session search.",
     'hero': '''    <figure class="hero-diagram">
@@ -672,14 +636,13 @@ flowchart LR
         <li><strong>FTS5 + CJK:</strong> <code>messages_fts_cjk</code> is what makes <code>session_search</code> work across sessions, including Chinese text.</li>
         <li><strong>Concurrency fixed:</strong> the write path now reloads once and checks drift + parses on one snapshot, closing the clobber race.</li>
       </ul>
-      <h2>Going further: post-cortex</h2>
-      <p>Built-in memory covers <code>MEMORY.md</code> and session FTS5. The community plugin <a class="inline" href="hermes-post-cortex.html">post-cortex</a> (<a class="inline" href="https://github.com/NousResearch/hermes-agent/commit/27ebb9be2678583725e57228e9c84b36b601320d">catalog entry</a>) is an <strong>optional</strong> memory provider: typed records, local semantic search, and shared workspaces on a daemon you host. It complements this chapter; it is not part of the four-part gateway series.</p>
-      <p style="color:var(--muted);font-size:14px;">This closes the 4-part series. Every <code>file:line</code> reference comes from the current <code>hermes-agent</code> source and can be used as a coordinate to read along.</p>'''),
+      <p>See also <a class="inline" href="hermes-post-cortex.html">Part 5: post-cortex</a> for an optional community memory provider (typed records, semantic recall, shared workspaces).</p>
+      <p style="color:var(--muted);font-size:14px;">Every <code>file:line</code> reference in this chapter comes from the current <code>hermes-agent</code> source and can be used as a coordinate to read along.</p>'''),
   },
   'zh': {
     'title': '长期记忆：事实落盘，会话进 FTS5',
     'desc': '两条记忆线：事实经 MemoryManager → Provider 落盘（最朴素的 MemoryStore 写 MEMORY.md），会话经 SessionDB + FTS5 支持跨会话检索。',
-    'eyebrow': '架构 &middot; 第 4 / 4 篇',
+    'eyebrow': '架构 &middot; 第 4 / 5 篇',
     'h1': '长期记忆：事实落盘，会话进 FTS5',
     'deck': '基于真实源码拆解 Hermes 的两条记忆线——写盘的事实记忆，与建全文索引、可跨会话检索的会话记忆。',
     'hero': '''    <figure class="hero-diagram">
@@ -746,16 +709,15 @@ flowchart LR
         <li><strong>FTS5 + CJK：</strong><code>messages_fts_cjk</code> 让 <code>session_search</code> 能跨会话检索，含中文。</li>
         <li><strong>修过并发：</strong>写入路径现在只重读一次、在同一快照上做 drift 检测与解析，堵住了被覆盖的竞态。</li>
       </ul>
-      <h2>延伸阅读：post-cortex</h2>
-      <p>内置记忆覆盖 <code>MEMORY.md</code> 与会话 FTS5。社区插件 <a class="inline" href="hermes-post-cortex-zh.html">post-cortex</a>（<a class="inline" href="https://github.com/NousResearch/hermes-agent/commit/27ebb9be2678583725e57228e9c84b36b601320d">catalog 收录</a>）是<strong>可选</strong> memory provider：类型化记录、本地语义检索、自托管 daemon 上的共享 workspace。它补充本篇内容，不属于四篇网关系列。</p>
-      <p style="color:var(--muted);font-size:14px;">本系列到此结束。文中所有 <code>file:line</code> 引用均来自 <code>hermes-agent</code> 当前源码，可作对照阅读的坐标。</p>'''),
+      <p>延伸阅读：<a class="inline" href="hermes-post-cortex-zh.html">第 5 篇 post-cortex</a>——可选社区 memory provider（类型化记录、语义召回、共享 workspace）。</p>
+      <p style="color:var(--muted);font-size:14px;">本篇文中所有 <code>file:line</code> 引用均来自 <code>hermes-agent</code> 当前源码，可作对照阅读的坐标。</p>'''),
   },
  },
  'post-cortex': {
   'en': {
     'title': 'post-cortex: Self-Hosted Semantic Memory for Hermes',
     'desc': 'Community memory provider post-cortex — typed records, local entity graph + semantic search, turn-time recall, mirrored MEMORY.md writes, multi-profile workspaces, and install/config on your own daemon.',
-    'eyebrow': 'Hermes deep dive &middot; Community memory',
+    'eyebrow': 'Architecture &middot; Part 5 of 5 &middot; Community memory',
     'h1': 'post-cortex: Self-Hosted Semantic Memory for Hermes',
     'deck': 'How the post-cortex plugin and daemon give Hermes structured, shared, semantic long-term memory — without replacing built-in MEMORY.md or the gateway story.',
     'hero': '''    <figure class="hero-diagram">
@@ -828,12 +790,11 @@ sequenceDiagram
         <li><strong>Shared by workspace:</strong> glob-map profiles (and other clients) into one long-term store.</li>
         <li><strong>Primary-agent writes:</strong> mirrored memory and optional capture; subagents/cron stay out of the auto-write path.</li>
       </ul>'''),
-    'related': True,
   },
   'zh': {
     'title': 'post-cortex：Hermes 自托管语义长期记忆',
     'desc': '社区 memory provider post-cortex — 类型化记录、本地实体图与语义检索、轮次前召回、镜像 MEMORY.md 写入、多 profile workspace 映射与自托管 daemon 安装配置。',
-    'eyebrow': 'Hermes 深潜 &middot; 社区记忆',
+    'eyebrow': '架构 &middot; 第 5 / 5 篇 &middot; 社区记忆',
     'h1': 'post-cortex：Hermes 自托管语义长期记忆',
     'deck': 'post-cortex 插件与 daemon 如何为 Hermes 提供结构化、可共享的语义长期记忆——不替代内置 MEMORY.md，也不改写网关架构叙事。',
     'hero': '''    <figure class="hero-diagram">
@@ -906,7 +867,6 @@ sequenceDiagram
         <li><strong>workspace 共享：</strong>glob 映射多 profile 与其他客户端。</li>
         <li><strong>主 Agent 写入：</strong>镜像 memory 与可选 capture；子 Agent / cron 不走自动写路径。</li>
       </ul>'''),
-    'related': True,
   },
  },
 }
@@ -932,7 +892,8 @@ def _write_part(slug, langs):
             byline = POST_CORTEX_BYLINE
         else:
             byline = BYLINE
-        related_block = related_cards(lang) if c.get('related') else ''
+        series_block = series(slug, lang) if slug in ARCH_PART_SLUGS else ''
+        related_block = ''
         extra_css = ARTICLE_TOC_CSS if slug == 'gateway' else ''
         article_toc = gateway_article_toc(lang) if slug == 'gateway' else ''
         langattr = 'zh-CN' if lang == 'zh' else 'en'
@@ -961,6 +922,7 @@ def _write_part(slug, langs):
     <div data-od-id="body">
 {body}
     </div>
+{series}
 {related}
     {author}
     <p class="lang-switch">{langswitch}</p>
@@ -1019,7 +981,7 @@ def _write_part(slug, langs):
             '{srccss}': SRC_CSS, '{chapterintrocss}': CHAPTER_INTRO_CSS, '{blogheader}': BLOG_SITE_HEADER, '{eyebrow}': c['eyebrow'], '{h1}': c['h1'],
             '{deck}': c['deck'], '{byline}': byline, '{extracss}': extra_css,
             '{articletoc}': article_toc, '{hero}': c['hero'], '{body}': c['body'],
-            '{related}': related_block,
+            '{series}': series_block, '{related}': related_block,
             '{author}': author, '{langswitch}': lang_switch, '{zoom}': ZOOM,
             '{hljscss}': HLJS_CSS, '{hljsjs}': HLJS_JS,
         }

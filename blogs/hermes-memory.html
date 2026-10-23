@@ -208,6 +208,7 @@
     
     
     
+    
     .series { margin-top: 56px; padding-top: 22px; border-top: 1px solid var(--border);
       font-family: Raleway, -apple-system, system-ui, sans-serif; font-size: 14px;
       color: var(--muted); text-align: center; line-height: 2; }
@@ -265,7 +266,7 @@
     </div>
   </header>
   <article class="wrap">
-    <div class="eyebrow" data-od-id="headline">Architecture &middot; Part 4 of 4</div>
+    <div class="eyebrow" data-od-id="headline">Architecture &middot; Part 4 of 5</div>
     <h1 data-od-id="headline">Long-Term Memory: Facts on Disk, Sessions in FTS5</h1>
     <p class="deck" data-od-id="headline">A source-grounded tour of Hermes's two memory tracks — fact memory written to disk, and session memory indexed for cross-session search.</p>
         <div class="byline">
@@ -339,10 +340,10 @@ flowchart LR
         <li><strong>FTS5 + CJK:</strong> <code>messages_fts_cjk</code> is what makes <code>session_search</code> work across sessions, including Chinese text.</li>
         <li><strong>Concurrency fixed:</strong> the write path now reloads once and checks drift + parses on one snapshot, closing the clobber race.</li>
       </ul>
-      <h2>Going further: post-cortex</h2>
-      <p>Built-in memory covers <code>MEMORY.md</code> and session FTS5. The community plugin <a class="inline" href="hermes-post-cortex.html">post-cortex</a> (<a class="inline" href="https://github.com/NousResearch/hermes-agent/commit/27ebb9be2678583725e57228e9c84b36b601320d">catalog entry</a>) is an <strong>optional</strong> memory provider: typed records, local semantic search, and shared workspaces on a daemon you host. It complements this chapter; it is not part of the four-part gateway series.</p>
-      <p style="color:var(--muted);font-size:14px;">This closes the 4-part series. Every <code>file:line</code> reference comes from the current <code>hermes-agent</code> source and can be used as a coordinate to read along.</p>
+      <p>See also <a class="inline" href="hermes-post-cortex.html">Part 5: post-cortex</a> for an optional community memory provider (typed records, semantic recall, shared workspaces).</p>
+      <p style="color:var(--muted);font-size:14px;">Every <code>file:line</code> reference in this chapter comes from the current <code>hermes-agent</code> source and can be used as a coordinate to read along.</p>
     </div>
+    <p class="series">Part of a 5-part series: <a href="hermes-gateway-p1.html">1 &middot; Gateway</a> &middot; <a href="hermes-whatsapp.html">2 &middot; WhatsApp</a> &middot; <a href="hermes-self-improving.html">3 &middot; Self-Improving</a> &middot; <a href="hermes-memory.html" class="cur">4 &middot; Memory</a> &middot; <a href="hermes-post-cortex.html">5 &middot; post-cortex</a></p>
 
         <div class="author">
       <div class="avatar">DL</div>

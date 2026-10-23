@@ -208,6 +208,7 @@
     
     
     
+    
     .series { margin-top: 56px; padding-top: 22px; border-top: 1px solid var(--border);
       font-family: Raleway, -apple-system, system-ui, sans-serif; font-size: 14px;
       color: var(--muted); text-align: center; line-height: 2; }
@@ -265,7 +266,7 @@
     </div>
   </header>
   <article class="wrap">
-    <div class="eyebrow" data-od-id="headline">Hermes deep dive &middot; Community memory</div>
+    <div class="eyebrow" data-od-id="headline">Architecture &middot; Part 5 of 5 &middot; Community memory</div>
     <h1 data-od-id="headline">post-cortex: Self-Hosted Semantic Memory for Hermes</h1>
     <p class="deck" data-od-id="headline">How the post-cortex plugin and daemon give Hermes structured, shared, semantic long-term memory — without replacing built-in MEMORY.md or the gateway story.</p>
         <div class="byline">
@@ -283,7 +284,7 @@ flowchart LR
       <figcaption>Plugin in the agent process; durable graph and vectors live in the daemon on your network.</figcaption>
     </figure>
     <div data-od-id="body">
-      <p class="chapter-intro">Hermes ships <strong>built-in</strong> long-term memory — <code>MEMORY.md</code> facts and <code>SessionDB</code> FTS5 search (see <a class="inline" href="hermes-memory.html">Part 4 of the architecture series</a>). <strong>post-cortex</strong> is a separate, community memory <em>provider</em>: a Hermes plugin plus a self-hosted daemon that stores <strong>typed records</strong> in an entity graph with <strong>local semantic search</strong>. Data stays on machines you control (RocksDB or SurrealDB, local embeddings). This article is a standalone deep dive — not a fifth chapter in the four-part gateway series.</p>
+      <p class="chapter-intro"><strong>Part 5</strong> of the architecture series covers an optional community memory provider. Built-in tracks — <code>MEMORY.md</code> facts and <code>SessionDB</code> FTS5 — are in <a class="inline" href="hermes-memory.html">Part 4</a>. <strong>post-cortex</strong> adds a Hermes plugin plus a self-hosted daemon for <strong>typed records</strong> in an entity graph with <strong>local semantic search</strong> (RocksDB or SurrealDB, local embeddings), without replacing the gateway story in earlier parts.</p>
       <h2>Why a separate stack?</h2>
       <p>Built-in Hermes memory is deliberately simple: facts in markdown files, sessions in SQLite FTS5. That fits most deployments. post-cortex targets teams that want <strong>structured</strong> knowledge (decisions, fixed problems, code changes, requirements, definitions), <strong>semantic recall</strong> before each turn, and <strong>shared workspaces</strong> across profiles or other clients — with everything stored locally. The plugin registered in <a class="inline" href="https://github.com/NousResearch/hermes-agent/commit/27ebb9be2678583725e57228e9c84b36b601320d">hermes-agent plugin-catalog</a>; sources live at <a class="inline" href="https://github.com/julymetodiev/hermes-plugin-post-cortex">hermes-plugin-post-cortex</a> and <a class="inline" href="https://github.com/julymetodiev/post-cortex">post-cortex</a> (Rust daemon).</p>
 
@@ -346,27 +347,8 @@ sequenceDiagram
         <li><strong>Primary-agent writes:</strong> mirrored memory and optional capture; subagents/cron stay out of the auto-write path.</li>
       </ul>
     </div>
-    <div class="related">
-      <h4>Related</h4>
-      <div class="grid">
-        <a class="card" href="hermes-memory.html">
-          <div class="thumb"></div>
-          <div class="body">
-            <div class="title">Long-Term Memory: Facts on Disk, Sessions in FTS5</div>
-            <div class="excerpt">Architecture series Part 4 — built-in MEMORY.md and SessionDB tracks.</div>
-            <div class="date">August 2026</div>
-          </div>
-        </a>
-        <a class="card" href="https://github.com/julymetodiev/hermes-plugin-post-cortex" target="_blank" rel="noopener">
-          <div class="thumb"></div>
-          <div class="body">
-            <div class="title">hermes-plugin-post-cortex</div>
-            <div class="excerpt">Plugin source, configuration reference, and catalog install.</div>
-            <div class="date">GitHub</div>
-          </div>
-        </a>
-      </div>
-    </div>
+    <p class="series">Part of a 5-part series: <a href="hermes-gateway-p1.html">1 &middot; Gateway</a> &middot; <a href="hermes-whatsapp.html">2 &middot; WhatsApp</a> &middot; <a href="hermes-self-improving.html">3 &middot; Self-Improving</a> &middot; <a href="hermes-memory.html">4 &middot; Memory</a> &middot; <a href="hermes-post-cortex.html" class="cur">5 &middot; post-cortex</a></p>
+
         <div class="author">
       <div class="avatar">DL</div>
       <div class="bio">
