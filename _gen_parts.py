@@ -105,56 +105,6 @@ GATEWAY_BYLINE = """    <div class="byline">
       <span>By Daniel Liu &middot; October 9, 2026 &middot; 20 min read</span>
     </div>"""
 
-POST_CORTEX_BYLINE = """    <div class="byline">
-      <div class="avatar">DL</div>
-      <span>By Daniel Liu &middot; October 18, 2026 &middot; 12 min read</span>
-    </div>"""
-
-def related_cards(lang: str) -> str:
-    if lang == 'zh':
-        return '''    <div class="related">
-      <h4>相关阅读</h4>
-      <div class="grid">
-        <a class="card" href="hermes-memory-zh.html">
-          <div class="thumb"></div>
-          <div class="body">
-            <div class="title">长期记忆：磁盘事实与会话 FTS5</div>
-            <div class="excerpt">架构系列第 4 篇 — 内置 MEMORY.md 与 SessionDB 两条记忆线。</div>
-            <div class="date">2026 年 8 月</div>
-          </div>
-        </a>
-        <a class="card" href="https://github.com/julymetodiev/hermes-plugin-post-cortex" target="_blank" rel="noopener">
-          <div class="thumb"></div>
-          <div class="body">
-            <div class="title">hermes-plugin-post-cortex</div>
-            <div class="excerpt">插件源码、配置说明与 Hermes catalog 安装方式。</div>
-            <div class="date">GitHub</div>
-          </div>
-        </a>
-      </div>
-    </div>'''
-    return '''    <div class="related">
-      <h4>Related</h4>
-      <div class="grid">
-        <a class="card" href="hermes-memory.html">
-          <div class="thumb"></div>
-          <div class="body">
-            <div class="title">Long-Term Memory: Facts on Disk, Sessions in FTS5</div>
-            <div class="excerpt">Architecture series Part 4 — built-in MEMORY.md and SessionDB tracks.</div>
-            <div class="date">August 2026</div>
-          </div>
-        </a>
-        <a class="card" href="https://github.com/julymetodiev/hermes-plugin-post-cortex" target="_blank" rel="noopener">
-          <div class="thumb"></div>
-          <div class="body">
-            <div class="title">hermes-plugin-post-cortex</div>
-            <div class="excerpt">Plugin source, configuration reference, and catalog install.</div>
-            <div class="date">GitHub</div>
-          </div>
-        </a>
-      </div>
-    </div>'''
-
 ARTICLE_TOC_CSS = """
     .article-toc {
       margin: 0 0 48px; padding: 22px 24px;
@@ -666,14 +616,64 @@ flowchart LR
         <figcaption>Figure 1 — Race-condition protection on memory writes. One disk read, one snapshot for both the drift check and the parse.</figcaption>
       </figure>
 
+      <h2>Optional provider: post-cortex</h2>
+      <p>Everything above is <strong>built-in</strong> Hermes memory. The community plugin <strong>post-cortex</strong> (<a class="inline" href="https://github.com/NousResearch/hermes-agent/commit/27ebb9be2678583725e57228e9c84b36b601320d">catalog entry</a>) is an alternate <code>MemoryProvider</code>: a Hermes plugin plus a self-hosted daemon that stores <strong>typed records</strong> in an entity graph with <strong>local semantic search</strong>. It targets teams that want structured knowledge (decisions, fixes, code changes, requirements), <strong>recall before each turn</strong>, and <strong>shared workspaces</strong> across profiles or other clients — without sending data off your machines (RocksDB or SurrealDB, local embeddings). Sources: <a class="inline" href="https://github.com/julymetodiev/hermes-plugin-post-cortex">hermes-plugin-post-cortex</a> and <a class="inline" href="https://github.com/julymetodiev/post-cortex">post-cortex</a> (Rust daemon). Switch via <code>memory.provider: post-cortex</code>; it does not replace the gateway architecture in earlier chapters.</p>
+      <p>Each profile talks to one HTTP daemon (default <code>http://127.0.0.1:3737</code>). The plugin maps profile names to a <strong>workspace</strong> with glob rules in <code>post-cortex.json</code> and opens a per-profile session (default <code>hermes:{profile}</code>). The daemon embeds text (Model2Vec by default) and runs hybrid retrieval.</p>
+      <figure class="diagram">
+        <pre class="mermaid">
+flowchart LR
+  H["Hermes agent"] <-->|HTTP| P["post-cortex plugin"]
+  P <-->|records / search| D["post-cortex daemon"]
+  D --> DB["RocksDB or SurrealDB + local embeddings"]
+        </pre>
+        <figcaption>Figure 2 — Plugin in the agent process; graph and vectors live in the daemon you host.</figcaption>
+      </figure>
+      <figure class="diagram">
+        <pre class="mermaid">
+sequenceDiagram
+  participant U as User message
+  participant H as Hermes turn
+  participant P as post-cortex plugin
+  participant D as Daemon
+  U->>H: new turn
+  H->>P: semantic recall (workspace)
+  P->>D: search query
+  D-->>P: top matches (score filtered)
+  P-->>H: inject up to ~5 records
+  H->>H: model + tools
+  H->>P: mirror memory writes (primary agent)
+  P->>D: append typed record
+        </pre>
+        <figcaption>Figure 3 — Recall runs before the model; durable writes can mirror built-in memory tool output.</figcaption>
+      </figure>
+      <h3>Turn-time recall</h3>
+      <p>With <code>auto_recall</code> on, the plugin searches the profile workspace before each turn. Weak hits, bare entity stubs, and <code>skip_patterns</code> noise are dropped. Up to <code>max_items</code> (default 5) records above <code>min_score</code> (default 0.62) are injected, truncated by <code>item_chars</code>. If the daemon is slow or down, recall is skipped after <code>timeout_s</code> — the turn still runs.</p>
+      <h3>Tools and skill</h3>
+      <ul>
+        <li><code>post_cortex_search</code> — semantic search over records (and optionally captured messages).</li>
+        <li><code>post_cortex_record</code> — write a typed record into the graph.</li>
+        <li><code>post_cortex_context</code> — neighbourhood and reverse dependencies for named components.</li>
+        <li><code>skill_view("post-cortex:memory")</code> — record format and search tips.</li>
+      </ul>
+      <p>Daemon <strong>0.5+</strong> adds <strong>cards</strong> (user + project notes in the system prompt), <strong>authorship</strong> (<code>hermes:{profile}</code> on records), and opt-in <strong>capture</strong> of completed turns (primary agent only; cron and subagents never auto-write).</p>
+      <h3>Mirroring and workspaces</h3>
+      <p>With <code>mirror_memory_writes: true</code>, what the primary agent saves through Hermes's built-in <code>memory</code> tool is also stored as a post-cortex record — cron and subagent runs do <strong>not</strong> mirror automatically. <code>workspaces</code> maps profile-name globs to a shared workspace (first match wins), e.g. <code>{"ops-*": "Ops", "dev-*": "MyProject", "*": "hermes"}</code>, so other post-cortex clients on the same project can read the same graph.</p>
+      <h3>Install and config</h3>
+      <ul>
+        <li><strong>Hermes</strong> &ge; 0.22.2; <strong>daemon</strong> &ge; 0.4.0 (cards, authorship, capture need 0.5.0).</li>
+        <li><code>hermes plugins install post-cortex</code> then <code>hermes memory setup</code> (or set <code>memory.provider: post-cortex</code> in profile <code>config.yaml</code>).</li>
+        <li>Start the daemon with <code>pcx start</code>; check with <code>hermes memory status</code>.</li>
+      </ul>
+      <p>Local tuning lives in <code>$HERMES_HOME/post-cortex.json</code>. <code>PCX_TOKEN</code> uses Hermes <strong>secret scope</strong> — never the JSON file. Remote daemons need matching <code>auth_token</code>, <code>PCX_TOKEN</code>, and daemon <code>allowed_hosts</code>.</p>
+      <blockquote class="inline">Minimal sketch: <code>{"url": "http://127.0.0.1:3737", "workspaces": {"*": "hermes"}, "auto_recall": true, "mirror_memory_writes": true}</code> — see the plugin README for the full key list.</blockquote>
+
       <h2>Takeaways</h2>
       <ul>
-        <li><strong>Two tracks:</strong> facts go through <code>MemoryManager → Provider</code> (disk); sessions go through <code>SessionDB + FTS5</code> (search).</li>
+        <li><strong>Two built-in tracks:</strong> facts go through <code>MemoryManager → Provider</code> (disk); sessions go through <code>SessionDB + FTS5</code> (search).</li>
         <li><strong>FTS5 + CJK:</strong> <code>messages_fts_cjk</code> is what makes <code>session_search</code> work across sessions, including Chinese text.</li>
-        <li><strong>Concurrency fixed:</strong> the write path now reloads once and checks drift + parses on one snapshot, closing the clobber race.</li>
+        <li><strong>Concurrency fixed:</strong> the write path reloads once and checks drift + parses on one snapshot, closing the clobber race.</li>
+        <li><strong>post-cortex (optional):</strong> typed entity graph + local semantic recall on your daemon; enable with <code>memory.provider</code>, mirror primary-agent <code>memory</code> writes, share graphs by workspace glob.</li>
       </ul>
-      <h2>Going further: post-cortex</h2>
-      <p>Built-in memory covers <code>MEMORY.md</code> and session FTS5. The community plugin <a class="inline" href="hermes-post-cortex.html">post-cortex</a> (<a class="inline" href="https://github.com/NousResearch/hermes-agent/commit/27ebb9be2678583725e57228e9c84b36b601320d">catalog entry</a>) is an <strong>optional</strong> memory provider: typed records, local semantic search, and shared workspaces on a daemon you host. It complements this chapter; it is not part of the four-part gateway series.</p>
       <p style="color:var(--muted);font-size:14px;">This closes the 4-part series. Every <code>file:line</code> reference comes from the current <code>hermes-agent</code> source and can be used as a coordinate to read along.</p>'''),
   },
   'zh': {
@@ -740,117 +740,18 @@ flowchart LR
         <figcaption>图 1 — 记忆写入的竞态防护。一次读盘、一份快照同时做 drift 检测 + 解析。</figcaption>
       </figure>
 
-      <h2>小结</h2>
-      <ul>
-        <li><strong>两条线：</strong>事实走 <code>MemoryManager → Provider</code>（落盘）；会话走 <code>SessionDB + FTS5</code>（检索）。</li>
-        <li><strong>FTS5 + CJK：</strong><code>messages_fts_cjk</code> 让 <code>session_search</code> 能跨会话检索，含中文。</li>
-        <li><strong>修过并发：</strong>写入路径现在只重读一次、在同一快照上做 drift 检测与解析，堵住了被覆盖的竞态。</li>
-      </ul>
-      <h2>延伸阅读：post-cortex</h2>
-      <p>内置记忆覆盖 <code>MEMORY.md</code> 与会话 FTS5。社区插件 <a class="inline" href="hermes-post-cortex-zh.html">post-cortex</a>（<a class="inline" href="https://github.com/NousResearch/hermes-agent/commit/27ebb9be2678583725e57228e9c84b36b601320d">catalog 收录</a>）是<strong>可选</strong> memory provider：类型化记录、本地语义检索、自托管 daemon 上的共享 workspace。它补充本篇内容，不属于四篇网关系列。</p>
-      <p style="color:var(--muted);font-size:14px;">本系列到此结束。文中所有 <code>file:line</code> 引用均来自 <code>hermes-agent</code> 当前源码，可作对照阅读的坐标。</p>'''),
-  },
- },
- 'post-cortex': {
-  'en': {
-    'title': 'post-cortex: Self-Hosted Semantic Memory for Hermes',
-    'desc': 'Community memory provider post-cortex — typed records, local entity graph + semantic search, turn-time recall, mirrored MEMORY.md writes, multi-profile workspaces, and install/config on your own daemon.',
-    'eyebrow': 'Hermes deep dive &middot; Community memory',
-    'h1': 'post-cortex: Self-Hosted Semantic Memory for Hermes',
-    'deck': 'How the post-cortex plugin and daemon give Hermes structured, shared, semantic long-term memory — without replacing built-in MEMORY.md or the gateway story.',
-    'hero': '''    <figure class="hero-diagram">
-      <pre class="mermaid">
-flowchart LR
-  H["Hermes agent"] <-->|HTTP| P["post-cortex plugin"]
-  P <-->|records / search| D["post-cortex daemon"]
-  D --> DB["RocksDB or SurrealDB + local embeddings"]
-      </pre>
-      <figcaption>Plugin in the agent process; durable graph and vectors live in the daemon on your network.</figcaption>
-    </figure>''',
-    'body': _chapter_body('post-cortex', 'en', '''      <h2>Why a separate stack?</h2>
-      <p>Built-in Hermes memory is deliberately simple: facts in markdown files, sessions in SQLite FTS5. That fits most deployments. post-cortex targets teams that want <strong>structured</strong> knowledge (decisions, fixed problems, code changes, requirements, definitions), <strong>semantic recall</strong> before each turn, and <strong>shared workspaces</strong> across profiles or other clients — with everything stored locally. The plugin registered in <a class="inline" href="https://github.com/NousResearch/hermes-agent/commit/27ebb9be2678583725e57228e9c84b36b601320d">hermes-agent plugin-catalog</a>; sources live at <a class="inline" href="https://github.com/julymetodiev/hermes-plugin-post-cortex">hermes-plugin-post-cortex</a> and <a class="inline" href="https://github.com/julymetodiev/post-cortex">post-cortex</a> (Rust daemon).</p>
-
-      <h2>Architecture: plugin, daemon, workspace</h2>
-      <p>Each Hermes profile talks to one HTTP daemon (default <code>http://127.0.0.1:3737</code>). The plugin maps the profile name to a <strong>workspace</strong> via glob rules in <code>post-cortex.json</code>, and opens a per-profile session (default <code>hermes:{profile}</code>). Records carry typed entities and relations; the daemon embeds text with a local model (Model2Vec by default) and runs hybrid retrieval. Nothing leaves your machines except optional remote daemon URLs you configure.</p>
-
+      <h2>可选 provider：post-cortex</h2>
+      <p>上文均为 Hermes <strong>内置</strong>记忆。社区插件 <strong>post-cortex</strong>（<a class="inline" href="https://github.com/NousResearch/hermes-agent/commit/27ebb9be2678583725e57228e9c84b36b601320d">catalog 收录</a>）是另一套 <code>MemoryProvider</code>：Hermes 插件 + 自托管 daemon，把<strong>类型化记录</strong>写入实体图并用<strong>本地语义检索</strong>召回。面向需要结构化知识（决策、已修复问题、代码变更、需求）、<strong>每轮前召回</strong>、以及跨 profile / 客户端<strong>共享 workspace</strong> 且数据留在本地的场景（RocksDB 或 SurrealDB、本地 embedding）。代码：<a class="inline" href="https://github.com/julymetodiev/hermes-plugin-post-cortex">hermes-plugin-post-cortex</a> 与 <a class="inline" href="https://github.com/julymetodiev/post-cortex">post-cortex</a>（Rust daemon）。经 <code>memory.provider: post-cortex</code> 切换，不改写前面章节的网关架构。</p>
+      <p>每个 profile 通过 HTTP 连一个 daemon（默认 <code>http://127.0.0.1:3737</code>）。插件用 <code>post-cortex.json</code> 里的 glob 映射 <strong>workspace</strong>，并打开每 profile 一条 session（默认 <code>hermes:{profile}</code>）。daemon 用本地模型做 embedding 与混合检索。</p>
       <figure class="diagram">
         <pre class="mermaid">
-sequenceDiagram
-  participant U as User message
-  participant H as Hermes turn
-  participant P as post-cortex plugin
-  participant D as Daemon
-  U->>H: new turn
-  H->>P: semantic recall (workspace)
-  P->>D: search query
-  D-->>P: top matches (score filtered)
-  P-->>H: inject up to ~5 records
-  H->>H: model + tools
-  H->>P: mirror memory writes (primary agent)
-  P->>D: append typed record
-        </pre>
-        <figcaption>Figure 1 — Recall runs before the model; durable writes can mirror built-in memory tool output.</figcaption>
-      </figure>
-
-      <h2>Turn-time recall</h2>
-      <p>When <code>auto_recall</code> is on, the plugin searches the profile's workspace before each turn. Weak hits, bare entity stubs, and noise matching <code>skip_patterns</code> are dropped. Up to <code>max_items</code> (default 5) records above <code>min_score</code> (default 0.62) are injected, truncated by <code>item_chars</code>. If the daemon is slow or down, recall is skipped after <code>timeout_s</code> — the turn still runs.</p>
-
-      <h2>Tools and skill</h2>
-      <ul>
-        <li><code>post_cortex_search</code> — semantic search over records (and optionally captured messages).</li>
-        <li><code>post_cortex_record</code> — write a typed record into the graph.</li>
-        <li><code>post_cortex_context</code> — neighbourhood and reverse dependencies for named components.</li>
-        <li><code>skill_view("post-cortex:memory")</code> — record format and search tips (<code>post-cortex:memory</code> skill).</li>
-      </ul>
-      <p>Daemon <strong>0.5+</strong> adds <strong>cards</strong> (user + project notes in the system prompt), <strong>authorship</strong> (<code>hermes:{profile}</code> on records), and opt-in <strong>capture</strong> of completed turns into a message stream (primary agent only; cron and subagents never auto-write).</p>
-
-      <h2>Mirroring built-in memory</h2>
-      <p>With <code>mirror_memory_writes: true</code>, what the primary agent saves through Hermes's built-in <code>memory</code> tool is also stored as a post-cortex record. Cron jobs and subagent runs do <strong>not</strong> get automatic mirroring — only the main agent path.</p>
-
-      <h2>Multi-profile workspaces</h2>
-      <p><code>workspaces</code> maps profile-name globs to a shared workspace name — first match wins. Example: <code>{"ops-*": "Ops", "dev-*": "MyProject", "*": "hermes"}</code> lets ops profiles share one graph while defaults stay isolated. Other post-cortex clients (e.g. a coding agent on the same project) can read the same workspace.</p>
-
-      <h2>Install and versions</h2>
-      <ul>
-        <li><strong>Hermes</strong> &ge; 0.22.2; <strong>daemon</strong> &ge; 0.4.0 (cards, authorship, capture need 0.5.0).</li>
-        <li><code>hermes plugins install post-cortex</code> then <code>hermes memory setup</code> (or <code>memory.provider: post-cortex</code> in profile <code>config.yaml</code>).</li>
-        <li>Start the daemon: <code>pcx start</code>. Check with <code>hermes memory status</code>.</li>
-      </ul>
-
-      <h2>Secrets and config</h2>
-      <p>Local tuning lives in <code>$HERMES_HOME/post-cortex.json</code> only. <code>PCX_TOKEN</code> is read through Hermes <strong>secret scope</strong> — never written into that JSON. URL defaults to loopback; remote daemons need matching <code>auth_token</code>, <code>PCX_TOKEN</code>, and daemon <code>allowed_hosts</code>.</p>
-      <blockquote class="inline">Minimal sketch: <code>{"url": "http://127.0.0.1:3737", "workspaces": {"*": "hermes"}, "auto_recall": true, "mirror_memory_writes": true}</code> — see the plugin README for the full key list.</blockquote>
-
-      <h2>Takeaways</h2>
-      <ul>
-        <li><strong>Optional provider:</strong> complements <code>MEMORY.md</code> / FTS5; switch via <code>memory.provider</code>, not a gateway rewrite.</li>
-        <li><strong>Typed + semantic:</strong> entity graph and local embeddings on your daemon; recall injects a small, scored context block each turn.</li>
-        <li><strong>Shared by workspace:</strong> glob-map profiles (and other clients) into one long-term store.</li>
-        <li><strong>Primary-agent writes:</strong> mirrored memory and optional capture; subagents/cron stay out of the auto-write path.</li>
-      </ul>'''),
-    'related': True,
-  },
-  'zh': {
-    'title': 'post-cortex：Hermes 自托管语义长期记忆',
-    'desc': '社区 memory provider post-cortex — 类型化记录、本地实体图与语义检索、轮次前召回、镜像 MEMORY.md 写入、多 profile workspace 映射与自托管 daemon 安装配置。',
-    'eyebrow': 'Hermes 深潜 &middot; 社区记忆',
-    'h1': 'post-cortex：Hermes 自托管语义长期记忆',
-    'deck': 'post-cortex 插件与 daemon 如何为 Hermes 提供结构化、可共享的语义长期记忆——不替代内置 MEMORY.md，也不改写网关架构叙事。',
-    'hero': '''    <figure class="hero-diagram">
-      <pre class="mermaid">
 flowchart LR
   H["Hermes Agent"] <-->|HTTP| P["post-cortex 插件"]
   P <-->|记录 / 检索| D["post-cortex daemon"]
   D --> DB["RocksDB 或 SurrealDB + 本地 embedding"]
-      </pre>
-      <figcaption>插件跑在 Agent 进程内；图与向量落在你可控网络上的 daemon。</figcaption>
-    </figure>''',
-    'body': _chapter_body('post-cortex', 'zh', '''      <h2>为什么另起一套？</h2>
-      <p>Hermes 内置记忆刻意保持简单：事实写 markdown，会话用 SQLite FTS5。post-cortex 面向需要<strong>结构化</strong>知识（决策、已修复问题、代码变更、需求、定义）、每轮前<strong>语义召回</strong>、以及跨 profile / 客户端<strong>共享 workspace</strong> 且数据留在本地的场景。插件已进 <a class="inline" href="https://github.com/NousResearch/hermes-agent/commit/27ebb9be2678583725e57228e9c84b36b601320d">hermes-agent plugin-catalog</a>；代码在 <a class="inline" href="https://github.com/julymetodiev/hermes-plugin-post-cortex">hermes-plugin-post-cortex</a> 与 <a class="inline" href="https://github.com/julymetodiev/post-cortex">post-cortex</a>（Rust daemon）。</p>
-
-      <h2>架构：插件、daemon、workspace</h2>
-      <p>每个 Hermes profile 通过 HTTP 连一个 daemon（默认 <code>http://127.0.0.1:3737</code>）。插件用 <code>post-cortex.json</code> 里的 glob 把 profile 名映射到 <strong>workspace</strong>，并打开每 profile 一条 session（默认 <code>hermes:{profile}</code>）。记录带类型化实体与关系；daemon 用本地模型做 embedding 与混合检索。除你配置的远程 URL 外，数据不离开自有环境。</p>
-
+        </pre>
+        <figcaption>图 2 — 插件在 Agent 进程内；图与向量落在你托管的 daemon。</figcaption>
+      </figure>
       <figure class="diagram">
         <pre class="mermaid">
 sequenceDiagram
@@ -867,46 +768,37 @@ sequenceDiagram
   H->>P: 镜像 memory 写入（主 Agent）
   P->>D: 追加类型化记录
         </pre>
-        <figcaption>图 1 — 模型前先召回；内置 memory 工具写入可镜像到 post-cortex。</figcaption>
+        <figcaption>图 3 — 模型前先召回；内置 memory 工具写入可镜像到 post-cortex。</figcaption>
       </figure>
-
-      <h2>轮次前召回</h2>
+      <h3>轮次前召回</h3>
       <p><code>auto_recall</code> 开启时，每轮开始前对 profile 对应 workspace 做语义检索。弱相关、空实体描述及 <code>skip_patterns</code> 命中的噪声会丢弃。高于 <code>min_score</code>（默认 0.62）的记录最多注入 <code>max_items</code>（默认 5）条，并按 <code>item_chars</code> 截断。daemon 慢或不可达时在 <code>timeout_s</code> 后跳过召回，轮次照常进行。</p>
-
-      <h2>工具与 skill</h2>
+      <h3>工具与 skill</h3>
       <ul>
         <li><code>post_cortex_search</code> — 对记录（及可选 capture 消息）做语义搜索。</li>
         <li><code>post_cortex_record</code> — 写入类型化记录进图。</li>
         <li><code>post_cortex_context</code> — 指定组件的邻域与反向依赖。</li>
-        <li><code>skill_view("post-cortex:memory")</code> — 记录格式与检索提示（<code>post-cortex:memory</code> skill）。</li>
+        <li><code>skill_view("post-cortex:memory")</code> — 记录格式与检索提示。</li>
       </ul>
       <p>daemon <strong>0.5+</strong> 支持 <strong>cards</strong>（用户卡与项目卡写入 system prompt）、<strong>authorship</strong>（记录带 <code>hermes:{profile}</code>）、以及可选 <strong>capture</strong> 把完成的轮次写入消息流（仅主 Agent；cron 与子 Agent 不会自动写入）。</p>
-
-      <h2>镜像内置 memory</h2>
-      <p><code>mirror_memory_writes: true</code> 时，主 Agent 通过 Hermes 内置 <code>memory</code> 工具保存的内容会同步为 post-cortex 记录。cron 与子 Agent <strong>不会</strong>自动镜像。</p>
-
-      <h2>多 profile 与 workspace</h2>
-      <p><code>workspaces</code> 用 profile 名 glob 映射到共享 workspace，先匹配者优先。例如 <code>{"ops-*": "Ops", "dev-*": "MyProject", "*": "hermes"}</code>。同一项目上的其他 post-cortex 客户端也可读同一 workspace。</p>
-
-      <h2>安装与版本</h2>
+      <h3>镜像与 workspace</h3>
+      <p><code>mirror_memory_writes: true</code> 时，主 Agent 通过内置 <code>memory</code> 工具保存的内容会同步为 post-cortex 记录；cron 与子 Agent <strong>不会</strong>自动镜像。<code>workspaces</code> 用 profile 名 glob 映射共享 workspace（先匹配者优先），例如 <code>{"ops-*": "Ops", "dev-*": "MyProject", "*": "hermes"}</code>，同一项目上的其他 post-cortex 客户端也可读同一图。</p>
+      <h3>安装与配置</h3>
       <ul>
         <li><strong>Hermes</strong> &ge; 0.22.2；<strong>daemon</strong> &ge; 0.4.0（cards、authorship、capture 需 0.5.0）。</li>
         <li><code>hermes plugins install post-cortex</code>，再 <code>hermes memory setup</code>（或在 profile <code>config.yaml</code> 设 <code>memory.provider: post-cortex</code>）。</li>
         <li>启动 daemon：<code>pcx start</code>；用 <code>hermes memory status</code> 检查连通性。</li>
       </ul>
-
-      <h2>密钥与配置</h2>
-      <p>本地选项仅在 <code>$HERMES_HOME/post-cortex.json</code>。<code>PCX_TOKEN</code> 走 Hermes <strong>secret scope</strong>，不会写入该 JSON。默认本机 URL；远程 daemon 需对齐 <code>auth_token</code>、<code>PCX_TOKEN</code> 与 daemon <code>allowed_hosts</code>。</p>
+      <p>本地选项仅在 <code>$HERMES_HOME/post-cortex.json</code>。<code>PCX_TOKEN</code> 走 Hermes <strong>secret scope</strong>，不会写入该 JSON。远程 daemon 需对齐 <code>auth_token</code>、<code>PCX_TOKEN</code> 与 daemon <code>allowed_hosts</code>。</p>
       <blockquote class="inline">最小示例：<code>{"url": "http://127.0.0.1:3737", "workspaces": {"*": "hermes"}, "auto_recall": true, "mirror_memory_writes": true}</code> — 完整键表见插件 README。</blockquote>
 
       <h2>小结</h2>
       <ul>
-        <li><strong>可选 provider：</strong>补充 <code>MEMORY.md</code> / FTS5，经 <code>memory.provider</code> 切换，不改网关主线。</li>
-        <li><strong>结构化 + 语义：</strong>自托管 daemon 上的实体图与本地 embedding；每轮注入少量高分上下文。</li>
-        <li><strong>workspace 共享：</strong>glob 映射多 profile 与其他客户端。</li>
-        <li><strong>主 Agent 写入：</strong>镜像 memory 与可选 capture；子 Agent / cron 不走自动写路径。</li>
-      </ul>'''),
-    'related': True,
+        <li><strong>两条内置线：</strong>事实走 <code>MemoryManager → Provider</code>（落盘）；会话走 <code>SessionDB + FTS5</code>（检索）。</li>
+        <li><strong>FTS5 + CJK：</strong><code>messages_fts_cjk</code> 让 <code>session_search</code> 能跨会话检索，含中文。</li>
+        <li><strong>修过并发：</strong>写入路径只重读一次、在同一快照上做 drift 检测与解析，堵住被覆盖的竞态。</li>
+        <li><strong>post-cortex（可选）：</strong>自托管 daemon 上的类型化实体图与语义召回；经 <code>memory.provider</code> 启用，可镜像主 Agent 的 <code>memory</code> 写入，按 workspace glob 共享图。</li>
+      </ul>
+      <p style="color:var(--muted);font-size:14px;">本系列到此结束。文中所有 <code>file:line</code> 引用均来自 <code>hermes-agent</code> 当前源码，可作对照阅读的坐标。</p>'''),
   },
  },
 }
@@ -926,13 +818,8 @@ def _write_part(slug, langs):
         lang_switch = ('Prefer 中文? <a href="%s">Read this article in 中文 &rarr;</a>' % other) if lang == 'en' \
                       else ('Read in English? <a href="%s">Read this article in English &rarr;</a>' % other)
         author = AUTHOR_EN if lang == 'en' else AUTHOR_ZH
-        if slug == 'gateway':
-            byline = GATEWAY_BYLINE
-        elif slug == 'post-cortex':
-            byline = POST_CORTEX_BYLINE
-        else:
-            byline = BYLINE
-        related_block = related_cards(lang) if c.get('related') else ''
+        byline = GATEWAY_BYLINE if slug == 'gateway' else BYLINE
+        related_block = ''
         extra_css = ARTICLE_TOC_CSS if slug == 'gateway' else ''
         article_toc = gateway_article_toc(lang) if slug == 'gateway' else ''
         langattr = 'zh-CN' if lang == 'zh' else 'en'
