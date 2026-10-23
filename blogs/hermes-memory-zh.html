@@ -209,6 +209,7 @@
     
     
     
+    
     .series { margin-top: 56px; padding-top: 22px; border-top: 1px solid var(--border);
       font-family: Raleway, -apple-system, system-ui, sans-serif; font-size: 14px;
       color: var(--muted); text-align: center; line-height: 2; }
@@ -286,7 +287,7 @@ flowchart LR
       <figcaption>两条线：事实落盘；会话建全文索引以支持跨会话检索。</figcaption>
     </figure>
     <div data-od-id="body">
-      <p class="chapter-intro">系列最后一篇讲持久化：Hermes 并行跑<strong>两条记忆线</strong>。事实经 <code>MemoryManager</code> 落到 <code>MEMORY.md</code> 等文件；会话历史在 <code>SessionDB</code> 里建 FTS5 全文索引（含 CJK），支撑 <code>session_search</code> 跨会话检索。下文沿这两条路径展开，并说明并发下原子写入与 drift 检测如何避免静默覆盖外部编辑。</p>
+      <p class="chapter-intro">第 4 篇讲内置持久化：Hermes 并行跑<strong>两条记忆线</strong>。事实经 <code>MemoryManager</code> 落到 <code>MEMORY.md</code> 等文件；会话历史在 <code>SessionDB</code> 里建 FTS5 全文索引（含 CJK），支撑 <code>session_search</code> 跨会话检索。下文沿这两条路径展开，并说明并发下原子写入与 drift 检测如何避免静默覆盖外部编辑。</p>
       <h2>事实记忆</h2>
       <p>事实经 <code>MemoryManager → MemoryProvider</code>——后台线程、串行、去噪。最朴素的实现 <code>MemoryStore</code>（<code>tools/memory_tool.py:159</code>）通过 <code>save_to_disk()</code>（<code>:387</code>）把 <code>MEMORY.md</code> 直接落盘。方法本身很小；安全性在 <code>_write_file</code>：它用<strong>原子临时文件 + rename</strong>，并发读取者永远不会看到一个写一半的文件：</p>
       <pre class="src"><code>def save_to_disk(self, target: str):
