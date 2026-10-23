@@ -733,6 +733,7 @@ flowchart LR
       <p>Built-in Hermes memory is deliberately simple: facts in markdown files, sessions in SQLite FTS5. That fits most deployments. post-cortex targets teams that want <strong>structured</strong> knowledge (decisions, fixed problems, code changes, requirements, definitions), <strong>semantic recall</strong> before each turn, and <strong>shared workspaces</strong> across profiles or other clients — with everything stored locally. The plugin registered in <a class="inline" href="https://github.com/NousResearch/hermes-agent/commit/27ebb9be2678583725e57228e9c84b36b601320d">hermes-agent plugin-catalog</a>; sources live at <a class="inline" href="https://github.com/julymetodiev/hermes-plugin-post-cortex">hermes-plugin-post-cortex</a> and <a class="inline" href="https://github.com/julymetodiev/post-cortex">post-cortex</a> (Rust daemon).</p>
 
       <h2>Architecture: plugin, daemon, workspace</h2>
+      <p>You install <strong>two</strong> pieces: catalog plugin <code>hermes-plugin-post-cortex</code> and a separately hosted <code>post-cortex</code> daemon with the <code>pcx</code> CLI. The plugin is a Hermes <strong>memory provider</strong> — not a personal skill bundle; the only bundled skill is <code>post-cortex:memory</code> for record-format hints.</p>
       <p>Each Hermes profile talks to one HTTP daemon (default <code>http://127.0.0.1:3737</code>). The plugin maps the profile name to a <strong>workspace</strong> via glob rules in <code>post-cortex.json</code>, and opens a per-profile session (default <code>hermes:{profile}</code>). Records carry typed entities and relations; the daemon embeds text with a local model (Model2Vec by default) and runs hybrid retrieval. Nothing leaves your machines except optional remote daemon URLs you configure.</p>
 
       <figure class="diagram">
@@ -764,7 +765,7 @@ sequenceDiagram
         <li><code>post_cortex_context</code> — neighbourhood and reverse dependencies for named components.</li>
         <li><code>skill_view("post-cortex:memory")</code> — record format and search tips (<code>post-cortex:memory</code> skill).</li>
       </ul>
-      <p>Daemon <strong>0.5+</strong> adds <strong>cards</strong> (user + project notes in the system prompt), <strong>authorship</strong> (<code>hermes:{profile}</code> on records), and opt-in <strong>capture</strong> of completed turns into a message stream (primary agent only; cron and subagents never auto-write).</p>
+      <p>The provider wires recall, mirroring, and the tools above; it does not ship a general skill pack beyond <code>post-cortex:memory</code>. Daemon <strong>0.5+</strong> adds <strong>cards</strong> (user + project notes in the system prompt), <strong>authorship</strong> (<code>hermes:{profile}</code> on records), and opt-in <strong>capture</strong> of completed turns into a message stream (primary agent only; cron and subagents never auto-write).</p>
 
       <h2>Mirroring built-in memory</h2>
       <p>With <code>mirror_memory_writes: true</code>, what the primary agent saves through Hermes's built-in <code>memory</code> tool is also stored as a post-cortex record. Cron jobs and subagent runs do <strong>not</strong> get automatic mirroring — only the main agent path.</p>
@@ -773,14 +774,15 @@ sequenceDiagram
       <p><code>workspaces</code> maps profile-name globs to a shared workspace name — first match wins. Example: <code>{"ops-*": "Ops", "dev-*": "MyProject", "*": "hermes"}</code> lets ops profiles share one graph while defaults stay isolated. Other post-cortex clients (e.g. a coding agent on the same project) can read the same workspace.</p>
 
       <h2>Install and versions</h2>
-      <ul>
-        <li><strong>Hermes</strong> &ge; 0.22.2; <strong>daemon</strong> &ge; 0.4.0 (cards, authorship, capture need 0.5.0).</li>
-        <li><code>hermes plugins install post-cortex</code> then <code>hermes memory setup</code> (or <code>memory.provider: post-cortex</code> in profile <code>config.yaml</code>).</li>
-        <li>Start the daemon: <code>pcx start</code>. Check with <code>hermes memory status</code>.</li>
-      </ul>
+      <p>Requires <strong>Hermes</strong> &ge; 0.22.2 and a <strong>daemon</strong> &ge; 0.4.0 (cards, authorship, and capture need <strong>0.5.0</strong>).</p>
+      <p><strong>Daemon.</strong> Install the Rust CLI with <code>cargo install post-cortex-daemon --features "embeddings,surrealdb-storage"</code> or <code>brew install julymetodiev/tap/post-cortex</code>. Run <code>pcx start</code> — default base URL <code>http://127.0.0.1:3737</code>. Daemon options live in <code>~/.post-cortex/daemon.toml</code>; for non-loopback binds set <code>PC_AUTH_TOKEN</code> (or <code>auth_token</code> in the file) and list client hosts in <code>allowed_hosts</code> / <code>PC_ALLOWED_HOSTS</code>.</p>
+      <p><strong>Plugin.</strong> <code>hermes plugins install post-cortex</code>, then <code>hermes memory setup</code> and choose post-cortex, or set <code>memory.provider: post-cortex</code> in the profile <code>config.yaml</code>. Start a new session; <code>hermes memory status</code> confirms the daemon is reachable.</p>
 
       <h2>Secrets and config</h2>
-      <p>Local tuning lives in <code>$HERMES_HOME/post-cortex.json</code> only. <code>PCX_TOKEN</code> is read through Hermes <strong>secret scope</strong> — never written into that JSON. URL defaults to loopback; remote daemons need matching <code>auth_token</code>, <code>PCX_TOKEN</code>, and daemon <code>allowed_hosts</code>.</p>
+      <p><strong>Connection.</strong> URL: <code>url</code> in <code>$HERMES_HOME/post-cortex.json</code>, else env <code>PCX_URL</code> (default loopback). Token: <code>PCX_TOKEN</code> through Hermes <strong>secret scope</strong> — never written into that JSON. When auth is on, match <code>PCX_TOKEN</code> to the daemon's <code>auth_token</code> / <code>PC_AUTH_TOKEN</code>.</p>
+      <p>Recall thresholds, workspaces, capture, and the rest of the plugin knobs also live in <code>post-cortex.json</code>. Remote daemons need aligned token and <code>allowed_hosts</code>, and usually a private network or TLS in front of the plugin's plain HTTP client.</p>
+      <p><strong>Desktop.</strong> Hermes Desktop has no separate post-cortex protocol: pick post-cortex as the memory provider in the GUI and enter the same URL and token. The daemon must still be running — typically <code>pcx start</code> on your machine before you chat.</p>
+      <p><strong>Cloud / shared host.</strong> Run <code>pcx</code> as its own service (VM, container, or always-on host), point each profile's <code>PCX_URL</code> at that base URL, and require token plus <code>allowed_hosts</code> so the daemon accepts your clients' <code>Host</code> headers.</p>
       <blockquote class="inline">Minimal sketch: <code>{"url": "http://127.0.0.1:3737", "workspaces": {"*": "hermes"}, "auto_recall": true, "mirror_memory_writes": true}</code> — see the plugin README for the full key list.</blockquote>
 
       <h2>Takeaways</h2>
@@ -810,6 +812,7 @@ flowchart LR
       <p>Hermes 内置记忆刻意保持简单：事实写 markdown，会话用 SQLite FTS5。post-cortex 面向需要<strong>结构化</strong>知识（决策、已修复问题、代码变更、需求、定义）、每轮前<strong>语义召回</strong>、以及跨 profile / 客户端<strong>共享 workspace</strong> 且数据留在本地的场景。插件已进 <a class="inline" href="https://github.com/NousResearch/hermes-agent/commit/27ebb9be2678583725e57228e9c84b36b601320d">hermes-agent plugin-catalog</a>；代码在 <a class="inline" href="https://github.com/julymetodiev/hermes-plugin-post-cortex">hermes-plugin-post-cortex</a> 与 <a class="inline" href="https://github.com/julymetodiev/post-cortex">post-cortex</a>（Rust daemon）。</p>
 
       <h2>架构：插件、daemon、workspace</h2>
+      <p>需要安装<strong>两件</strong>：catalog 插件 <code>hermes-plugin-post-cortex</code>，以及单独部署的 <code>post-cortex</code> daemon（<code>pcx</code> CLI）。插件是 Hermes 的 <strong>memory provider</strong>，不是个人 skill 包；唯一自带的 skill 是 <code>post-cortex:memory</code>（记录格式提示）。</p>
       <p>每个 Hermes profile 通过 HTTP 连一个 daemon（默认 <code>http://127.0.0.1:3737</code>）。插件用 <code>post-cortex.json</code> 里的 glob 把 profile 名映射到 <strong>workspace</strong>，并打开每 profile 一条 session（默认 <code>hermes:{profile}</code>）。记录带类型化实体与关系；daemon 用本地模型做 embedding 与混合检索。除你配置的远程 URL 外，数据不离开自有环境。</p>
 
       <figure class="diagram">
@@ -841,7 +844,7 @@ sequenceDiagram
         <li><code>post_cortex_context</code> — 指定组件的邻域与反向依赖。</li>
         <li><code>skill_view("post-cortex:memory")</code> — 记录格式与检索提示（<code>post-cortex:memory</code> skill）。</li>
       </ul>
-      <p>daemon <strong>0.5+</strong> 支持 <strong>cards</strong>（用户卡与项目卡写入 system prompt）、<strong>authorship</strong>（记录带 <code>hermes:{profile}</code>）、以及可选 <strong>capture</strong> 把完成的轮次写入消息流（仅主 Agent；cron 与子 Agent 不会自动写入）。</p>
+      <p>provider 负责召回、镜像与上述工具，除 <code>post-cortex:memory</code> 外不附带通用 skill 包。daemon <strong>0.5+</strong> 支持 <strong>cards</strong>（用户卡与项目卡写入 system prompt）、<strong>authorship</strong>（记录带 <code>hermes:{profile}</code>）、以及可选 <strong>capture</strong> 把完成的轮次写入消息流（仅主 Agent；cron 与子 Agent 不会自动写入）。</p>
 
       <h2>镜像内置 memory</h2>
       <p><code>mirror_memory_writes: true</code> 时，主 Agent 通过 Hermes 内置 <code>memory</code> 工具保存的内容会同步为 post-cortex 记录。cron 与子 Agent <strong>不会</strong>自动镜像。</p>
@@ -850,14 +853,15 @@ sequenceDiagram
       <p><code>workspaces</code> 用 profile 名 glob 映射到共享 workspace，先匹配者优先。例如 <code>{"ops-*": "Ops", "dev-*": "MyProject", "*": "hermes"}</code>。同一项目上的其他 post-cortex 客户端也可读同一 workspace。</p>
 
       <h2>安装与版本</h2>
-      <ul>
-        <li><strong>Hermes</strong> &ge; 0.22.2；<strong>daemon</strong> &ge; 0.4.0（cards、authorship、capture 需 0.5.0）。</li>
-        <li><code>hermes plugins install post-cortex</code>，再 <code>hermes memory setup</code>（或在 profile <code>config.yaml</code> 设 <code>memory.provider: post-cortex</code>）。</li>
-        <li>启动 daemon：<code>pcx start</code>；用 <code>hermes memory status</code> 检查连通性。</li>
-      </ul>
+      <p>需要 <strong>Hermes</strong> &ge; 0.22.2，<strong>daemon</strong> &ge; 0.4.0（cards、authorship、capture 需 <strong>0.5.0</strong>）。</p>
+      <p><strong>Daemon。</strong> 用 <code>cargo install post-cortex-daemon --features "embeddings,surrealdb-storage"</code> 或 <code>brew install julymetodiev/tap/post-cortex</code> 安装 Rust CLI。执行 <code>pcx start</code>，默认地址 <code>http://127.0.0.1:3737</code>。配置写在 <code>~/.post-cortex/daemon.toml</code>；非本机监听时设置 <code>PC_AUTH_TOKEN</code>（或文件内 <code>auth_token</code>），并在 <code>allowed_hosts</code> / <code>PC_ALLOWED_HOSTS</code> 中列出客户端主机名。</p>
+      <p><strong>插件。</strong><code>hermes plugins install post-cortex</code>，再 <code>hermes memory setup</code> 选 post-cortex，或在 profile <code>config.yaml</code> 设 <code>memory.provider: post-cortex</code>。新开 session 后，用 <code>hermes memory status</code> 确认 daemon 可达。</p>
 
       <h2>密钥与配置</h2>
-      <p>本地选项仅在 <code>$HERMES_HOME/post-cortex.json</code>。<code>PCX_TOKEN</code> 走 Hermes <strong>secret scope</strong>，不会写入该 JSON。默认本机 URL；远程 daemon 需对齐 <code>auth_token</code>、<code>PCX_TOKEN</code> 与 daemon <code>allowed_hosts</code>。</p>
+      <p><strong>连接。</strong> URL：<code>post-cortex.json</code> 的 <code>url</code>，或环境变量 <code>PCX_URL</code>（默认本机）。Token：<code>PCX_TOKEN</code> 走 Hermes <strong>secret scope</strong>，不会写入 JSON。开启鉴权时，<code>PCX_TOKEN</code> 需与 daemon 的 <code>auth_token</code> / <code>PC_AUTH_TOKEN</code> 一致。</p>
+      <p>召回阈值、workspaces、capture 等插件选项也在 <code>$HERMES_HOME/post-cortex.json</code>。远程 daemon 需对齐 token 与 <code>allowed_hosts</code>，并建议在插件纯 HTTP 客户端前加私有网络或 TLS。</p>
+      <p><strong>桌面端。</strong>Hermes Desktop 没有单独的 post-cortex 协议：在 GUI 中选 post-cortex 作为 memory provider 并填写 URL / token 即可。daemon 仍需先跑起来——常见做法是在本机先 <code>pcx start</code> 再聊天。</p>
+      <p><strong>云端 / 共享主机。</strong>把 <code>pcx</code> 单独部署为服务（VM、容器或常开主机），各 profile 的 <code>PCX_URL</code> 指向该地址，并配置 token 与 <code>allowed_hosts</code>，否则客户端 <code>Host</code> 头会被拒绝。</p>
       <blockquote class="inline">最小示例：<code>{"url": "http://127.0.0.1:3737", "workspaces": {"*": "hermes"}, "auto_recall": true, "mirror_memory_writes": true}</code> — 完整键表见插件 README。</blockquote>
 
       <h2>小结</h2>
