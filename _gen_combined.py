@@ -18,6 +18,7 @@ PARTS = [
     ('whatsapp',    'whatsapp', '2 · WhatsApp'),
     ('self-improving','self',   '3 · Self-Improving'),
     ('memory',      'memory',   '4 · Memory'),
+    ('post-cortex', 'post-cortex', '5 · post-cortex'),
 ]
 
 COMBINED_CSS = """
@@ -117,9 +118,9 @@ def build(lang):
 
     langattr = 'zh-CN' if is_zh else 'en'
     title = 'Hermes Agent 架构深潜' if is_zh else 'Deep Dive into Hermes Agent'
-    desc = ('四篇合一：消息网关、WhatsApp、自我进化、长期记忆——基于真实源码的架构深潜。'
+    desc = ('五篇合一：消息网关、WhatsApp、自我进化、长期记忆、post-cortex——基于真实源码的架构深潜。'
             if is_zh else
-            'All four parts in one: Message Gateway, WhatsApp, Self-Improving, and Long-Term Memory — a source-grounded architecture deep-dive.')
+            'All five parts in one: Message Gateway, WhatsApp, Self-Improving, Long-Term Memory, and post-cortex — a source-grounded architecture deep-dive.')
 
     html = """<!doctype html>
 <html lang="%s">

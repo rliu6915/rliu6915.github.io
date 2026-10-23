@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Deep Dive into Hermes Agent</title>
-  <meta content="All four parts in one: Message Gateway, WhatsApp, Self-Improving, and Long-Term Memory — a source-grounded architecture deep-dive." name="description" />
+  <meta content="All five parts in one: Message Gateway, WhatsApp, Self-Improving, Long-Term Memory, and post-cortex — a source-grounded architecture deep-dive." name="description" />
   <link href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,600,600i,700,700i|Raleway:300,300i,400,400i,500,500i,600,600i,700,700i|Poppins:300,300i,400,400i,500,500i,600,600i,700,700i" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
   <script>document.addEventListener("DOMContentLoaded", function(){ if(window.mermaid){ mermaid.initialize({startOnLoad:true, theme:"dark", themeVariables:{fontSize:"15px"}}); } });</script>
@@ -314,11 +314,12 @@
       <li><a href="#whatsapp">2 · WhatsApp</a></li>
       <li><a href="#self">3 · Self-Improving</a></li>
       <li><a href="#memory">4 · Memory</a></li>
+      <li><a href="#post-cortex">5 · post-cortex</a></li>
       </ol>
       <div class="article-toc-back"><a href="index.html">← Blog</a></div>
     </nav>
   <section class="part" id="gateway">
-    <div class="eyebrow">Architecture &middot; Part 1 of 4</div>
+    <div class="eyebrow">Architecture &middot; Part 1 of 5</div>
     <h1>The Message Gateway: Decoupling Platforms from the Agent</h1>
         <figure class="hero-diagram">
       <pre class="mermaid">
@@ -477,7 +478,7 @@ flowchart TD
   </section>
 
   <section class="part" id="whatsapp">
-    <div class="eyebrow">Architecture &middot; Part 2 of 4</div>
+    <div class="eyebrow">Architecture &middot; Part 2 of 5</div>
     <h1>WhatsApp Integration: Cloud API, Webhooks, and Failure Isolation</h1>
         <figure class="hero-diagram">
       <pre class="mermaid">
@@ -546,7 +547,7 @@ flowchart TD
   </section>
 
   <section class="part" id="self">
-    <div class="eyebrow">Architecture &middot; Part 3 of 4</div>
+    <div class="eyebrow">Architecture &middot; Part 3 of 5</div>
     <h1>Self-Improving: Crystallizing Experience into Skills</h1>
         <figure class="hero-diagram">
       <pre class="mermaid">
@@ -630,7 +631,7 @@ flowchart TD
   </section>
 
   <section class="part" id="memory">
-    <div class="eyebrow">Architecture &middot; Part 4 of 4</div>
+    <div class="eyebrow">Architecture &middot; Part 4 of 5</div>
     <h1>Long-Term Memory: Facts on Disk, Sessions in FTS5</h1>
         <figure class="hero-diagram">
       <pre class="mermaid">
@@ -644,7 +645,7 @@ flowchart LR
       <figcaption>Two tracks: facts land on disk; sessions get a full-text index for cross-session retrieval.</figcaption>
     </figure>
     <div data-od-id="body">
-      <p class="chapter-intro">The series closes on persistence: Hermes runs <strong>two memory tracks</strong> in parallel. Fact memory flows through <code>MemoryManager</code> to on-disk files like <code>MEMORY.md</code>; session memory lives in <code>SessionDB</code> with an FTS5 index (including CJK) so <code>session_search</code> can recall across past conversations. The rest of the chapter walks those paths, the concurrency guards that keep atomic writes from clobbering external edits, and the optional community provider <strong>post-cortex</strong> when you want typed records and semantic recall on a daemon you host.</p>
+      <p class="chapter-intro">Part 4 covers built-in persistence: Hermes runs <strong>two memory tracks</strong> in parallel. Fact memory flows through <code>MemoryManager</code> to on-disk files like <code>MEMORY.md</code>; session memory lives in <code>SessionDB</code> with an FTS5 index (including CJK) so <code>session_search</code> can recall across past conversations. The rest of the chapter walks those paths and the concurrency guards that keep atomic writes from clobbering external edits.</p>
       <h2>Fact memory</h2>
       <p>Facts flow through <code>MemoryManager → MemoryProvider</code> — a background thread, serial, de-noised. The simplest implementation, <code>MemoryStore</code> (<code>tools/memory_tool.py:159</code>), writes <code>MEMORY.md</code> straight to disk via <code>save_to_disk()</code> (<code>:387</code>). The method itself is tiny; the safety lives in <code>_write_file</code>, which uses an <strong>atomic temp-file + rename</strong> so concurrent readers never see a half-written file:</p>
       <pre class="src"><code>def save_to_disk(self, target: str):
@@ -692,18 +693,41 @@ flowchart LR
         <figcaption>Figure 1 — Race-condition protection on memory writes. One disk read, one snapshot for both the drift check and the parse.</figcaption>
       </figure>
 
-      <h2>Optional provider: post-cortex</h2>
-      <p>Everything above is <strong>built-in</strong> Hermes memory. The community plugin <strong>post-cortex</strong> (<a class="inline" href="https://github.com/NousResearch/hermes-agent/commit/27ebb9be2678583725e57228e9c84b36b601320d">catalog entry</a>) is an alternate <code>MemoryProvider</code>: a Hermes plugin plus a self-hosted daemon that stores <strong>typed records</strong> in an entity graph with <strong>local semantic search</strong>. It targets teams that want structured knowledge (decisions, fixes, code changes, requirements), <strong>recall before each turn</strong>, and <strong>shared workspaces</strong> across profiles or other clients — without sending data off your machines (RocksDB or SurrealDB, local embeddings). Sources: <a class="inline" href="https://github.com/julymetodiev/hermes-plugin-post-cortex">hermes-plugin-post-cortex</a> and <a class="inline" href="https://github.com/julymetodiev/post-cortex">post-cortex</a> (Rust daemon). Switch via <code>memory.provider: post-cortex</code>; it does not replace the gateway architecture in earlier chapters.</p>
-      <p>Each profile talks to one HTTP daemon (default <code>http://127.0.0.1:3737</code>). The plugin maps profile names to a <strong>workspace</strong> with glob rules in <code>post-cortex.json</code> and opens a per-profile session (default <code>hermes:{profile}</code>). The daemon embeds text (Model2Vec by default) and runs hybrid retrieval.</p>
-      <figure class="diagram">
-        <pre class="mermaid">
+      <h2>Takeaways</h2>
+      <ul>
+        <li><strong>Two tracks:</strong> facts go through <code>MemoryManager → Provider</code> (disk); sessions go through <code>SessionDB + FTS5</code> (search).</li>
+        <li><strong>FTS5 + CJK:</strong> <code>messages_fts_cjk</code> is what makes <code>session_search</code> work across sessions, including Chinese text.</li>
+        <li><strong>Concurrency fixed:</strong> the write path now reloads once and checks drift + parses on one snapshot, closing the clobber race.</li>
+      </ul>
+      <p>See also <a class="inline" href="hermes-post-cortex.html">Part 5: post-cortex</a> for an optional community memory provider (typed records, semantic recall, shared workspaces).</p>
+      <p style="color:var(--muted);font-size:14px;">Every <code>file:line</code> reference in this chapter comes from the current <code>hermes-agent</code> source and can be used as a coordinate to read along.</p>
+    </div>
+    <div class="sec-foot">
+      <a class="footlink" href="#memory">↑ Back to top</a>
+      <a class="footlink" href="index.html">← Back to Blog</a>
+    </div>
+  </section>
+
+  <section class="part" id="post-cortex">
+    <div class="eyebrow">Architecture &middot; Part 5 of 5 &middot; Community memory</div>
+    <h1>post-cortex: Self-Hosted Semantic Memory for Hermes</h1>
+        <figure class="hero-diagram">
+      <pre class="mermaid">
 flowchart LR
   H["Hermes agent"] <-->|HTTP| P["post-cortex plugin"]
   P <-->|records / search| D["post-cortex daemon"]
   D --> DB["RocksDB or SurrealDB + local embeddings"]
-        </pre>
-        <figcaption>Figure 2 — Plugin in the agent process; graph and vectors live in the daemon you host.</figcaption>
-      </figure>
+      </pre>
+      <figcaption>Plugin in the agent process; durable graph and vectors live in the daemon on your network.</figcaption>
+    </figure>
+    <div data-od-id="body">
+      <p class="chapter-intro"><strong>Part 5</strong> of the architecture series covers an optional community memory provider. Built-in tracks — <code>MEMORY.md</code> facts and <code>SessionDB</code> FTS5 — are in <a class="inline" href="hermes-memory.html">Part 4</a>. <strong>post-cortex</strong> adds a Hermes plugin plus a self-hosted daemon for <strong>typed records</strong> in an entity graph with <strong>local semantic search</strong> (RocksDB or SurrealDB, local embeddings), without replacing the gateway story in earlier parts.</p>
+      <h2>Why a separate stack?</h2>
+      <p>Built-in Hermes memory is deliberately simple: facts in markdown files, sessions in SQLite FTS5. That fits most deployments. post-cortex targets teams that want <strong>structured</strong> knowledge (decisions, fixed problems, code changes, requirements, definitions), <strong>semantic recall</strong> before each turn, and <strong>shared workspaces</strong> across profiles or other clients — with everything stored locally. The plugin registered in <a class="inline" href="https://github.com/NousResearch/hermes-agent/commit/27ebb9be2678583725e57228e9c84b36b601320d">hermes-agent plugin-catalog</a>; sources live at <a class="inline" href="https://github.com/julymetodiev/hermes-plugin-post-cortex">hermes-plugin-post-cortex</a> and <a class="inline" href="https://github.com/julymetodiev/post-cortex">post-cortex</a> (Rust daemon).</p>
+
+      <h2>Architecture: plugin, daemon, workspace</h2>
+      <p>Each Hermes profile talks to one HTTP daemon (default <code>http://127.0.0.1:3737</code>). The plugin maps the profile name to a <strong>workspace</strong> via glob rules in <code>post-cortex.json</code>, and opens a per-profile session (default <code>hermes:{profile}</code>). Records carry typed entities and relations; the daemon embeds text with a local model (Model2Vec by default) and runs hybrid retrieval. Nothing leaves your machines except optional remote daemon URLs you configure.</p>
+
       <figure class="diagram">
         <pre class="mermaid">
 sequenceDiagram
@@ -720,40 +744,48 @@ sequenceDiagram
   H->>P: mirror memory writes (primary agent)
   P->>D: append typed record
         </pre>
-        <figcaption>Figure 3 — Recall runs before the model; durable writes can mirror built-in memory tool output.</figcaption>
+        <figcaption>Figure 1 — Recall runs before the model; durable writes can mirror built-in memory tool output.</figcaption>
       </figure>
-      <h3>Turn-time recall</h3>
-      <p>With <code>auto_recall</code> on, the plugin searches the profile workspace before each turn. Weak hits, bare entity stubs, and <code>skip_patterns</code> noise are dropped. Up to <code>max_items</code> (default 5) records above <code>min_score</code> (default 0.62) are injected, truncated by <code>item_chars</code>. If the daemon is slow or down, recall is skipped after <code>timeout_s</code> — the turn still runs.</p>
-      <h3>Tools and skill</h3>
+
+      <h2>Turn-time recall</h2>
+      <p>When <code>auto_recall</code> is on, the plugin searches the profile's workspace before each turn. Weak hits, bare entity stubs, and noise matching <code>skip_patterns</code> are dropped. Up to <code>max_items</code> (default 5) records above <code>min_score</code> (default 0.62) are injected, truncated by <code>item_chars</code>. If the daemon is slow or down, recall is skipped after <code>timeout_s</code> — the turn still runs.</p>
+
+      <h2>Tools and skill</h2>
       <ul>
         <li><code>post_cortex_search</code> — semantic search over records (and optionally captured messages).</li>
         <li><code>post_cortex_record</code> — write a typed record into the graph.</li>
         <li><code>post_cortex_context</code> — neighbourhood and reverse dependencies for named components.</li>
-        <li><code>skill_view("post-cortex:memory")</code> — record format and search tips.</li>
+        <li><code>skill_view("post-cortex:memory")</code> — record format and search tips (<code>post-cortex:memory</code> skill).</li>
       </ul>
-      <p>Daemon <strong>0.5+</strong> adds <strong>cards</strong> (user + project notes in the system prompt), <strong>authorship</strong> (<code>hermes:{profile}</code> on records), and opt-in <strong>capture</strong> of completed turns (primary agent only; cron and subagents never auto-write).</p>
-      <h3>Mirroring and workspaces</h3>
-      <p>With <code>mirror_memory_writes: true</code>, what the primary agent saves through Hermes's built-in <code>memory</code> tool is also stored as a post-cortex record — cron and subagent runs do <strong>not</strong> mirror automatically. <code>workspaces</code> maps profile-name globs to a shared workspace (first match wins), e.g. <code>{"ops-*": "Ops", "dev-*": "MyProject", "*": "hermes"}</code>, so other post-cortex clients on the same project can read the same graph.</p>
-      <h3>Install and config</h3>
+      <p>Daemon <strong>0.5+</strong> adds <strong>cards</strong> (user + project notes in the system prompt), <strong>authorship</strong> (<code>hermes:{profile}</code> on records), and opt-in <strong>capture</strong> of completed turns into a message stream (primary agent only; cron and subagents never auto-write).</p>
+
+      <h2>Mirroring built-in memory</h2>
+      <p>With <code>mirror_memory_writes: true</code>, what the primary agent saves through Hermes's built-in <code>memory</code> tool is also stored as a post-cortex record. Cron jobs and subagent runs do <strong>not</strong> get automatic mirroring — only the main agent path.</p>
+
+      <h2>Multi-profile workspaces</h2>
+      <p><code>workspaces</code> maps profile-name globs to a shared workspace name — first match wins. Example: <code>{"ops-*": "Ops", "dev-*": "MyProject", "*": "hermes"}</code> lets ops profiles share one graph while defaults stay isolated. Other post-cortex clients (e.g. a coding agent on the same project) can read the same workspace.</p>
+
+      <h2>Install and versions</h2>
       <ul>
         <li><strong>Hermes</strong> &ge; 0.22.2; <strong>daemon</strong> &ge; 0.4.0 (cards, authorship, capture need 0.5.0).</li>
-        <li><code>hermes plugins install post-cortex</code> then <code>hermes memory setup</code> (or set <code>memory.provider: post-cortex</code> in profile <code>config.yaml</code>).</li>
-        <li>Start the daemon with <code>pcx start</code>; check with <code>hermes memory status</code>.</li>
+        <li><code>hermes plugins install post-cortex</code> then <code>hermes memory setup</code> (or <code>memory.provider: post-cortex</code> in profile <code>config.yaml</code>).</li>
+        <li>Start the daemon: <code>pcx start</code>. Check with <code>hermes memory status</code>.</li>
       </ul>
-      <p>Local tuning lives in <code>$HERMES_HOME/post-cortex.json</code>. <code>PCX_TOKEN</code> uses Hermes <strong>secret scope</strong> — never the JSON file. Remote daemons need matching <code>auth_token</code>, <code>PCX_TOKEN</code>, and daemon <code>allowed_hosts</code>.</p>
+
+      <h2>Secrets and config</h2>
+      <p>Local tuning lives in <code>$HERMES_HOME/post-cortex.json</code> only. <code>PCX_TOKEN</code> is read through Hermes <strong>secret scope</strong> — never written into that JSON. URL defaults to loopback; remote daemons need matching <code>auth_token</code>, <code>PCX_TOKEN</code>, and daemon <code>allowed_hosts</code>.</p>
       <blockquote class="inline">Minimal sketch: <code>{"url": "http://127.0.0.1:3737", "workspaces": {"*": "hermes"}, "auto_recall": true, "mirror_memory_writes": true}</code> — see the plugin README for the full key list.</blockquote>
 
       <h2>Takeaways</h2>
       <ul>
-        <li><strong>Two built-in tracks:</strong> facts go through <code>MemoryManager → Provider</code> (disk); sessions go through <code>SessionDB + FTS5</code> (search).</li>
-        <li><strong>FTS5 + CJK:</strong> <code>messages_fts_cjk</code> is what makes <code>session_search</code> work across sessions, including Chinese text.</li>
-        <li><strong>Concurrency fixed:</strong> the write path reloads once and checks drift + parses on one snapshot, closing the clobber race.</li>
-        <li><strong>post-cortex (optional):</strong> typed entity graph + local semantic recall on your daemon; enable with <code>memory.provider</code>, mirror primary-agent <code>memory</code> writes, share graphs by workspace glob.</li>
+        <li><strong>Optional provider:</strong> complements <code>MEMORY.md</code> / FTS5; switch via <code>memory.provider</code>, not a gateway rewrite.</li>
+        <li><strong>Typed + semantic:</strong> entity graph and local embeddings on your daemon; recall injects a small, scored context block each turn.</li>
+        <li><strong>Shared by workspace:</strong> glob-map profiles (and other clients) into one long-term store.</li>
+        <li><strong>Primary-agent writes:</strong> mirrored memory and optional capture; subagents/cron stay out of the auto-write path.</li>
       </ul>
-      <p style="color:var(--muted);font-size:14px;">This closes the 4-part series. Every <code>file:line</code> reference comes from the current <code>hermes-agent</code> source and can be used as a coordinate to read along.</p>
     </div>
     <div class="sec-foot">
-      <a class="footlink" href="#memory">↑ Back to top</a>
+      <a class="footlink" href="#post-cortex">↑ Back to top</a>
       <a class="footlink" href="index.html">← Back to Blog</a>
     </div>
   </section>
