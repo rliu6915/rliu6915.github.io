@@ -203,6 +203,8 @@
     
     
     
+    
+    
     .series { margin-top: 56px; padding-top: 22px; border-top: 1px solid var(--border);
       font-family: Raleway, -apple-system, system-ui, sans-serif; font-size: 14px;
       color: var(--muted); text-align: center; line-height: 2; }
@@ -724,9 +726,13 @@ flowchart LR
       <p class="chapter-intro">架构系列<strong>第 5 篇</strong>介绍可选社区 memory provider。内置 <code>MEMORY.md</code> 事实线与 <code>SessionDB</code> FTS5 见 <a class="inline" href="hermes-memory-zh.html">第 4 篇</a>。<strong>post-cortex</strong> 由 Hermes 插件 + 自托管 daemon 提供<strong>类型化记录</strong>实体图与<strong>本地语义检索</strong>（RocksDB 或 SurrealDB、本地 embedding），不替代前面章节的网关架构。</p>
       <h2>为什么另起一套？</h2>
       <p>Hermes 内置记忆刻意保持简单：事实写 markdown，会话用 SQLite FTS5。post-cortex 面向需要<strong>结构化</strong>知识（决策、已修复问题、代码变更、需求、定义）、每轮前<strong>语义召回</strong>、以及跨 profile / 客户端<strong>共享 workspace</strong> 且数据留在本地的场景。插件已进 <a class="inline" href="https://github.com/NousResearch/hermes-agent/commit/27ebb9be2678583725e57228e9c84b36b601320d">hermes-agent plugin-catalog</a>；代码在 <a class="inline" href="https://github.com/julymetodiev/hermes-plugin-post-cortex">hermes-plugin-post-cortex</a> 与 <a class="inline" href="https://github.com/julymetodiev/post-cortex">post-cortex</a>（Rust daemon）。</p>
+      <p>相对每轮把整份 <code>MEMORY.md</code> / <code>USER.md</code> 注入上下文，post-cortex 用<strong>额外服务</strong>换来更大容量的持久存储、<strong>按需</strong>检索、数据留在本机，以及多 Agent 可共享的图；Hermes 侧集成仍是<strong>社区实验</strong>性质。</p>
 
       <h2>架构：插件、daemon、workspace</h2>
+      <p>需要安装<strong>两件</strong>：catalog 插件 <code>hermes-plugin-post-cortex</code>，以及单独部署的 <code>post-cortex</code> daemon（<code>pcx</code> CLI）。插件是 Hermes 的 <strong>memory provider</strong>，不是个人 skill 包；唯一自带的 skill 是 <code>post-cortex:memory</code>（记录格式提示）。</p>
       <p>每个 Hermes profile 通过 HTTP 连一个 daemon（默认 <code>http://127.0.0.1:3737</code>）。插件用 <code>post-cortex.json</code> 里的 glob 把 profile 名映射到 <strong>workspace</strong>，并打开每 profile 一条 session（默认 <code>hermes:{profile}</code>）。记录带类型化实体与关系；daemon 用本地模型做 embedding 与混合检索。除你配置的远程 URL 外，数据不离开自有环境。</p>
+      <p>底层是<strong>数据库支撑的 RAG 记忆</strong>：嵌入式 KV（默认 <strong>RocksDB</strong>，在 <code>pcx</code> 进程内落盘，不是独立 Redis 类服务；可选 <strong>SurrealDB</strong>），之上是原始记录、<strong>HNSW</strong> 向量索引、<strong>BM25</strong> 全文索引与<strong>实体图</strong>。只负责记忆，不承载 Hermes skill。</p>
+      <p>daemon 同时是标准 <strong>MCP 服务</strong>（streamable HTTP），Claude Code 等 MCP 客户端可连同一 workspace；Hermes 通过插件封装。多个 Agent 因此可共享一份长期记忆。</p>
 
       <figure class="diagram">
         <pre class="mermaid">
@@ -750,6 +756,23 @@ sequenceDiagram
       <h2>轮次前召回</h2>
       <p><code>auto_recall</code> 开启时，每轮开始前对 profile 对应 workspace 做语义检索。弱相关、空实体描述及 <code>skip_patterns</code> 命中的噪声会丢弃。高于 <code>min_score</code>（默认 0.62）的记录最多注入 <code>max_items</code>（默认 5）条，并按 <code>item_chars</code> 截断。daemon 慢或不可达时在 <code>timeout_s</code> 后跳过召回，轮次照常进行。</p>
 
+      <h2>混合检索管线</h2>
+      <p>daemon 检索（<code>content_vectorizer/search.rs</code>）并行跑<strong>向量</strong>与 <strong>BM25</strong> 两路；配置 reranker 时还有第三路<strong>图</strong>检索。每路取前 <code>FUSION_DEPTH</code>（50）条；开启 rerank 时池扩大到 <code>RERANK_POOL</code>（300）。用 RRF 融合：<code>1/(RRF_K + rank)</code>，<code>RRF_K=60</code>，按候选求和并归一化。可选 cross-encoder 重排（失败则保留 RRF 顺序）。随后 <code>enrich_results_with_graph</code> 可写入实体邻域与最短路径组成的 <strong>Structural Insight</strong>，<code>neighbour_radius</code> 会拉取命中记录两侧的相邻条目。</p>
+      <figure class="diagram">
+        <pre class="mermaid">
+flowchart LR
+  Q[查询] --> V[向量路]
+  Q --> B[BM25 路]
+  Q --> G[图路（rerank 时）]
+  V --> RRF[RRF 融合 top 50 或 300]
+  B --> RRF
+  G --> RRF
+  RRF --> CE[可选 cross-encoder 重排]
+  CE --> EN[图增强 + neighbour_radius]
+        </pre>
+        <figcaption>图 2 — 开启 rerank 时为三路检索；融合深度与 rerank 池大小由 daemon 固定。</figcaption>
+      </figure>
+
       <h2>工具与 skill</h2>
       <ul>
         <li><code>post_cortex_search</code> — 对记录（及可选 capture 消息）做语义搜索。</li>
@@ -757,31 +780,37 @@ sequenceDiagram
         <li><code>post_cortex_context</code> — 指定组件的邻域与反向依赖。</li>
         <li><code>skill_view("post-cortex:memory")</code> — 记录格式与检索提示（<code>post-cortex:memory</code> skill）。</li>
       </ul>
-      <p>daemon <strong>0.5+</strong> 支持 <strong>cards</strong>（用户卡与项目卡写入 system prompt）、<strong>authorship</strong>（记录带 <code>hermes:{profile}</code>）、以及可选 <strong>capture</strong> 把完成的轮次写入消息流（仅主 Agent；cron 与子 Agent 不会自动写入）。</p>
+      <p>provider 负责召回、镜像与上述工具，除 <code>post-cortex:memory</code> 外不附带通用 skill 包。daemon <strong>0.5+</strong> 支持 <strong>cards</strong>（用户卡与项目卡写入 system prompt）、<strong>authorship</strong>（记录带 <code>hermes:{profile}</code>）、以及可选 <strong>capture</strong> 把完成的轮次写入消息流（仅主 Agent；cron 与子 Agent 不会自动写入）。</p>
 
-      <h2>镜像内置 memory</h2>
-      <p><code>mirror_memory_writes: true</code> 时，主 Agent 通过 Hermes 内置 <code>memory</code> 工具保存的内容会同步为 post-cortex 记录。cron 与子 Agent <strong>不会</strong>自动镜像。</p>
+      <h2>写入来源</h2>
+      <p>数据在 daemon 内按 <strong>workspace</strong> 与 <strong>session</strong> 分组。写入来自：镜像内置 memory（<code>on_memory_write</code> 仅处理 <strong>add</strong> 与 <strong>replace</strong>）、显式 <code>post_cortex_record</code>，以及开启 <code>capture</code> 时<strong>主 Agent</strong> 完成的轮次。cron 与子 Agent 在上述路径上均<strong>不会</strong>自动写入。</p>
+      <p><code>mirror_memory_writes: true</code> 时，Hermes <code>memory</code> 工具内容会写成类型化记录。<strong>replace</strong> 会追加<strong>新</strong>记录，插件不删旧行；<strong>remove</strong> 被忽略。插件 README 写明<strong>从不删除</strong> post-cortex 数据，检索可能同时命中旧版与新版，需在 daemon 侧自行清理。</p>
 
       <h2>多 profile 与 workspace</h2>
       <p><code>workspaces</code> 用 profile 名 glob 映射到共享 workspace，先匹配者优先。例如 <code>{"ops-*": "Ops", "dev-*": "MyProject", "*": "hermes"}</code>。同一项目上的其他 post-cortex 客户端也可读同一 workspace。</p>
 
       <h2>安装与版本</h2>
-      <ul>
-        <li><strong>Hermes</strong> &ge; 0.22.2；<strong>daemon</strong> &ge; 0.4.0（cards、authorship、capture 需 0.5.0）。</li>
-        <li><code>hermes plugins install post-cortex</code>，再 <code>hermes memory setup</code>（或在 profile <code>config.yaml</code> 设 <code>memory.provider: post-cortex</code>）。</li>
-        <li>启动 daemon：<code>pcx start</code>；用 <code>hermes memory status</code> 检查连通性。</li>
-      </ul>
+      <p>需要 <strong>Hermes</strong> &ge; 0.22.2，<strong>daemon</strong> &ge; 0.4.0（cards、authorship、capture 需 <strong>0.5.0</strong>）。</p>
+      <p><strong>Daemon。</strong> 用 <code>cargo install post-cortex-daemon --features "embeddings,surrealdb-storage"</code> 或 <code>brew install julymetodiev/tap/post-cortex</code> 安装 Rust CLI。执行 <code>pcx start</code>，默认地址 <code>http://127.0.0.1:3737</code>。配置写在 <code>~/.post-cortex/daemon.toml</code>；非本机监听时设置 <code>PC_AUTH_TOKEN</code>（或文件内 <code>auth_token</code>），并在 <code>allowed_hosts</code> / <code>PC_ALLOWED_HOSTS</code> 中列出客户端主机名。</p>
+      <p><strong>插件。</strong><code>hermes plugins install post-cortex</code>，再 <code>hermes memory setup</code> 选 post-cortex，或在 profile <code>config.yaml</code> 设 <code>memory.provider: post-cortex</code>。新开 session 后，用 <code>hermes memory status</code> 确认 daemon 可达。</p>
+      <p><strong>模型。</strong>默认 embedding 为 <code>minishlab/potion-multilingual-128M</code>（Model2Vec 静态向量，256 维，多语言；纯 CPU 即可）。可选 <code>potion-code-16M</code>；启用 <code>bert</code> feature 后可用 MiniLM、多语言 MiniLM、bge-small 等 Candle 后端。Rerank 可用本地 ONNX cross-encoder（如 <code>cross-encoder/ms-marco-MiniLM-L4-v2</code>，int8）或 Voyage API（候选文本会出机）。模型在 <code>pcx</code> 进程内加载；首次启动从 Hugging Face 下载，云端部署应为缓存挂载持久盘。Linux 本地 rerank 需通过 <code>ORT_DYLIB_PATH</code> 指向 <code>libonnxruntime.so</code>。</p>
 
       <h2>密钥与配置</h2>
-      <p>本地选项仅在 <code>$HERMES_HOME/post-cortex.json</code>。<code>PCX_TOKEN</code> 走 Hermes <strong>secret scope</strong>，不会写入该 JSON。默认本机 URL；远程 daemon 需对齐 <code>auth_token</code>、<code>PCX_TOKEN</code> 与 daemon <code>allowed_hosts</code>。</p>
+      <p><strong>连接。</strong> URL：<code>post-cortex.json</code> 的 <code>url</code>，或环境变量 <code>PCX_URL</code>（默认本机）。Token：<code>PCX_TOKEN</code> 走 Hermes <strong>secret scope</strong>，不会写入 JSON。开启鉴权时，<code>PCX_TOKEN</code> 需与 daemon 的 <code>auth_token</code> / <code>PC_AUTH_TOKEN</code> 一致。</p>
+      <p>召回阈值、workspaces、capture 等插件选项也在 <code>$HERMES_HOME/post-cortex.json</code>。远程 daemon 需对齐 token 与 <code>allowed_hosts</code>，并建议在插件纯 HTTP 客户端前加私有网络或 TLS。</p>
+      <p><strong>桌面端。</strong>Hermes Desktop 没有单独的 post-cortex 协议：在 GUI 中选 post-cortex 作为 memory provider 并填写 URL / token 即可。daemon 仍需先跑起来——常见做法是在本机先 <code>pcx start</code> 再聊天。</p>
+      <p><strong>云端 / 共享主机。</strong>把 <code>pcx</code> 单独部署为服务（VM、容器或常开主机），各 profile 的 <code>PCX_URL</code> 指向该地址，并配置 token 与 <code>allowed_hosts</code>，否则客户端 <code>Host</code> 头会被拒绝。</p>
       <blockquote class="inline">最小示例：<code>{"url": "http://127.0.0.1:3737", "workspaces": {"*": "hermes"}, "auto_recall": true, "mirror_memory_writes": true}</code> — 完整键表见插件 README。</blockquote>
+
+      <h2>注意点</h2>
+      <p>图扩展用的实体抽取按空白分词且只保留长于 3 字符的 token，<strong>中文查询</strong>的实体路较弱，主要依赖向量与 BM25。镜像 <strong>replace</strong> 后若不在 daemon 清理，检索可能重复命中新旧事实。</p>
 
       <h2>小结</h2>
       <ul>
         <li><strong>可选 provider：</strong>补充 <code>MEMORY.md</code> / FTS5，经 <code>memory.provider</code> 切换，不改网关主线。</li>
-        <li><strong>结构化 + 语义：</strong>自托管 daemon 上的实体图与本地 embedding；每轮注入少量高分上下文。</li>
-        <li><strong>workspace 共享：</strong>glob 映射多 profile 与其他客户端。</li>
-        <li><strong>主 Agent 写入：</strong>镜像 memory 与可选 capture；子 Agent / cron 不走自动写路径。</li>
+        <li><strong>磁盘 RAG：</strong>RocksDB（或 SurrealDB）+ HNSW + BM25 + 实体图；MCP HTTP 供 Hermes 之外的客户端共享。</li>
+        <li><strong>混合召回：</strong>向量 / BM25 /（图）融合与可选 rerank，再由插件注入少量高分上下文。</li>
+        <li><strong>主 Agent 写入：</strong>镜像 add/replace 与可选 capture；插件不删数据；cron / 子 Agent 不自动写。</li>
       </ul>
     </div>
     <div class="sec-foot">
